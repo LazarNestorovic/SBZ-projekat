@@ -22,6 +22,10 @@ public class Main {
         scenarijoFinalnaStaza(kc);
         scenarijoStatistike(kc);
         scenarijoStilIgre(kc);
+        scenarijoModusAgresivni(kc);
+        scenarijoModusDefanzivni(kc);
+        scenarijoBackwardChaining(kc);
+        scenarijoCEP(kc);
     }
 
     // -------------------------------------------------------
@@ -353,6 +357,236 @@ public class Main {
 
             System.out.println("Rezultat: " + stanje);
             System.out.println("Statistike igraca 0: " + stat0);
+        } finally {
+            ks.dispose();
+        }
+        System.out.println();
+    }
+
+    // -------------------------------------------------------
+    // Scenarijo 8: Detekcija AGRESIVNOG modusa
+    // Protivnik ima 3 figure na tabli, jedna od njih je < 10 polja od cilja.
+    // Ocekujemo: AGRESIVNI modus, bijeg iz opasne zone demotiran na prioritet 5.
+    // -------------------------------------------------------
+    static void scenarijoModusAgresivni(KieContainer kc) {
+        System.out.println("--- SCENARIJO 8: Modus Agresivni (4.3) ---");
+
+        KieSession ks = kc.newKieSession("ludoKsession");
+        try {
+            StanjeIgre stanje = new StanjeIgre(0);
+
+            // Igrac 0: jedna figura na tabli, u opasnoj zoni (protivnik je u dosegu)
+            Figura f0a = new Figura(0, 0);
+            f0a.updatePozicija(10);  // absPos = (1+10-2)%52+1 = 10
+            // f0a je u opasnoj zoni jer ce je protivnicka figura moci dostici
+
+            // Igrac 1: 3 figure na tabli, jedna u blizini cilja (relPos=50, absPos=(14+50-2)%52+1)
+            Figura f1a = new Figura(2, 1);
+            f1a.updatePozicija(5);   // absPos = (14+5-2)%52+1 = 18
+
+            Figura f1b = new Figura(3, 1);
+            f1b.updatePozicija(30);  // absPos = (14+30-2)%52+1 = 43
+
+            Figura f1c = new Figura(4, 1);
+            f1c.updatePozicija(50);  // relPos=50 >= 49 → blizu cilja! absPos = (14+50-2)%52+1 = 63%52+1=12 (wraparound)
+
+            // Dice = 3; f0a moze ici na relPos=13 (van opasne zone) → bijeg iz opasne zone
+            IshodKocke kocka = new IshodKocke(3, 0);
+
+            StatistikaIgraca stat0 = new StatistikaIgraca(0);
+            StatistikaIgraca stat1 = new StatistikaIgraca(1);
+
+            System.out.println("Igrac 0 figura: " + f0a);
+            System.out.println("Igrac 1 figure: " + f1a + ", " + f1b + ", " + f1c);
+            System.out.println("f1c relPos=50 >= 49 → agresivni modus trebao biti aktiviran");
+            System.out.println("Kocka: " + kocka);
+            System.out.println();
+
+            ks.insert(stanje);
+            ks.insert(f0a);
+            ks.insert(f1a); ks.insert(f1b); ks.insert(f1c);
+            ks.insert(kocka);
+            ks.insert(stat0); ks.insert(stat1);
+
+            ks.fireAllRules();
+
+            System.out.println("Rezultat: " + stanje);
+            System.out.println("Detektovani modus: " + stanje.getModus());
+        } finally {
+            ks.dispose();
+        }
+        System.out.println();
+    }
+
+    // -------------------------------------------------------
+    // Scenarijo 9: Detekcija DEFANZIVNOG modusa
+    // Nas igrac ima samo 1 figuru na tabli — izlozena pozicija.
+    // Ocekujemo: DEFANZIVNI modus, potez na sigurno polje dobi prioritet 2.
+    // -------------------------------------------------------
+    static void scenarijoModusDefanzivni(KieContainer kc) {
+        System.out.println("--- SCENARIJO 9: Modus Defanzivni (4.3) ---");
+
+        KieSession ks = kc.newKieSession("ludoKsession");
+        try {
+            StanjeIgre stanje = new StanjeIgre(2);
+
+            // Igrac 2: samo jedna figura na tabli, ostale u bazi
+            Figura f2a = new Figura(0, 2);
+            f2a.updatePozicija(3);  // absPos = (27+3-2)%52+1 = 29
+
+            Figura f2b = new Figura(1, 2); // ostaje u bazi
+
+            // Igrac 0: figura u blizini nase
+            Figura f0a = new Figura(4, 0);
+            f0a.updatePozicija(25);  // absPos = (1+25-2)%52+1 = 25
+
+            // Kocka = 9 → zvjezdasto polje (apsolutnaPozicija 9 je sigurno) — ali dice max 6
+            // Kocka = 6: f2a ide na relPos=9, absPos=(27+9-2)%52+1 = 35 (zvijezda — sigurno!)
+            IshodKocke kocka = new IshodKocke(6, 0);
+
+            StatistikaIgraca stat2 = new StatistikaIgraca(2);
+            StatistikaIgraca stat0 = new StatistikaIgraca(0);
+
+            System.out.println("Igrac 2 figure: " + f2a + " (jedina na tabli), " + f2b + " (baza)");
+            System.out.println("Kocka: " + kocka);
+            System.out.println("Ocekujemo DEFANZIVNI modus jer igrac ima <= 1 figuru na tabli");
+            System.out.println();
+
+            ks.insert(stanje);
+            ks.insert(f2a); ks.insert(f2b);
+            ks.insert(f0a);
+            ks.insert(kocka);
+            ks.insert(stat2); ks.insert(stat0);
+
+            ks.fireAllRules();
+
+            System.out.println("Rezultat: " + stanje);
+            System.out.println("Detektovani modus: " + stanje.getModus());
+        } finally {
+            ks.dispose();
+        }
+        System.out.println();
+    }
+
+    // -------------------------------------------------------
+    // Scenarijo 10: Backward Chaining — pobjeda na dohvat ruke
+    // Sve figure su unutar 3 poteza od cilja.
+    // Ocekujemo: BC pravilo demotira poteze figura koje NISU na finalnoj stazi.
+    // -------------------------------------------------------
+    static void scenarijoBackwardChaining(KieContainer kc) {
+        System.out.println("--- SCENARIJO 10: Backward Chaining - pobjeda na dohvat ruke (6.1) ---");
+
+        KieSession ks = kc.newKieSession("ludoKsession");
+        try {
+            StanjeIgre stanje = new StanjeIgre(0);
+
+            // Igrac 0: sva 4 potencijalna poteza blizu cilja
+            // relPos 55 → (58-55+5)/6 = 8/6 = 1 potez (min)
+            Figura f0a = new Figura(0, 0);
+            f0a.updatePozicija(55);  // finalna staza
+
+            // relPos 52 → (58-52+5)/6 = 11/6 = 1 potez
+            Figura f0b = new Figura(1, 0);
+            f0b.updatePozicija(52);  // aktivna, ali jednim korakom ulazi u finalnu
+
+            // relPos 56 → (58-56+5)/6 = 7/6 = 1 potez
+            Figura f0c = new Figura(2, 0);
+            f0c.updatePozicija(56);  // finalna staza
+
+            // Dice = 2: f0b (relPos=52) ide na relPos=54 (finalna staza, sigurna)
+            //           f0a (relPos=55) ide na relPos=57 (finalija)
+            IshodKocke kocka = new IshodKocke(2, 0);
+
+            StatistikaIgraca stat0 = new StatistikaIgraca(0);
+
+            System.out.println("Igrac 0 figure: relPos=" + f0a.getRelativnaPozicija() +
+                " (finalna), relPos=" + f0b.getRelativnaPozicija() +
+                " (aktivna), relPos=" + f0c.getRelativnaPozicija() + " (finalna)");
+            System.out.println("Sve figure su unutar 3 poteza od cilja (BC query)");
+            System.out.println("Kocka: " + kocka);
+            System.out.println();
+
+            ks.insert(stanje);
+            ks.insert(f0a); ks.insert(f0b); ks.insert(f0c);
+            ks.insert(kocka);
+            ks.insert(stat0);
+
+            ks.fireAllRules();
+
+            System.out.println("Rezultat: " + stanje);
+            System.out.println("BC strateski izvjestaj ispisuje se gore ako su sve figure dostizne za 10 poteza.");
+        } finally {
+            ks.dispose();
+        }
+        System.out.println();
+    }
+
+    // -------------------------------------------------------
+    // Scenarijo 11: Complex Event Processing — detekcija dogadjaja
+    // Ugrozena figura + protivnik blizu pobjede → DogadjajIgre CEP eventi
+    // -------------------------------------------------------
+    static void scenarijoCEP(KieContainer kc) {
+        System.out.println("--- SCENARIJO 11: CEP - detekcija dogadjaja (6.2) ---");
+
+        KieSession ks = kc.newKieSession("ludoKsession");
+        try {
+            StanjeIgre stanje = new StanjeIgre(0);
+
+            // Igrac 0: figura ugrozena (nezasticena, protivnik je u dosegu)
+            Figura f0a = new Figura(0, 0);
+            f0a.updatePozicija(10);  // absPos=10
+
+            // Igrac 1: figura koja prijeti eliminacijom igraca 0
+            // jeUDoseguZa(10, prot): razlika = (10 - prot + 52) % 52, >= 1 && <= 6
+            // Npr. prot=7: (10-7+52)%52 = 3 → u dosegu!
+            Figura f1a = new Figura(2, 1);
+            f1a.updatePozicija(6);   // abs=(14+6-2)%52+1 = 19 — nije u dosegu za abs=10
+            // Idemo direktno: igrac 1 relPos=9 → absPos=(14+9-2)%52+1 = 22 — ni to
+            // Direktno postavimo: trebamo protivnika na absPos=7 da bude u dosegu za absPos=10
+            // BoardUtils: jeUDoseguZa(10, 7) = (10-7+52)%52=3, 3>=1 && 3<=6 → true
+            // relPos za igraca 1 koji daje absPos=7: (7 - 14 + 52) % 52 = 45... ne radi lijepo
+            // Koristimo igraca 2 (startuje na 27): relPos da da absPos=7:
+            //   (27 + relPos - 2) % 52 + 1 = 7 → (27+relPos-2)%52 = 6 → 25+relPos = 6 (mod 52) → relPos = 33
+            // Za provjeru: (27+33-2)%52+1 = 58%52+1 = 6+1 = 7 ✓
+
+            // Igrac 1 ima 3 figure u finalnoj stazi → PROTIVNIK_BLIZU_POBJEDE
+            Figura f1b = new Figura(3, 1);
+            f1b.updatePozicija(53); // finalna staza
+
+            Figura f1c = new Figura(4, 1);
+            f1c.updatePozicija(55); // finalna staza
+
+            Figura f1d = new Figura(5, 1);
+            f1d.updatePozicija(57); // finalna staza
+
+            // Igrac 2: postavimo na absPos=7 da prijeti igracu 0 na absPos=10
+            Figura f2a = new Figura(6, 2);
+            f2a.updatePozicija(33); // absPos=7, u dosegu za absPos=10
+
+            IshodKocke kocka = new IshodKocke(4, 0);
+
+            StatistikaIgraca stat0 = new StatistikaIgraca(0);
+            StatistikaIgraca stat1 = new StatistikaIgraca(1);
+            StatistikaIgraca stat2 = new StatistikaIgraca(2);
+
+            System.out.println("Igrac 0 figura: absPos=10 (ugrozena od igraca 2 na absPos=7)");
+            System.out.println("Igrac 1: 3 figure u finalnoj stazi → PROTIVNIK_BLIZU_POBJEDE");
+            System.out.println("Igrac 2: figura na absPos=7, u dosegu za absPos=10 → PRIJETNJA_ELIMINACIJOM");
+            System.out.println("Ocekujemo CEP evente: PRIJETNJA_ELIMINACIJOM, PROTIVNIK_BLIZU_POBJEDE");
+            System.out.println("Kocka: " + kocka);
+            System.out.println();
+
+            ks.insert(stanje);
+            ks.insert(f0a);
+            ks.insert(f1a); ks.insert(f1b); ks.insert(f1c); ks.insert(f1d);
+            ks.insert(f2a);
+            ks.insert(kocka);
+            ks.insert(stat0); ks.insert(stat1); ks.insert(stat2);
+
+            ks.fireAllRules();
+
+            System.out.println("Rezultat: " + stanje);
+            System.out.println("CEP eventi su insertovani u radnu memoriju (vidi [CEP] ispise gore).");
         } finally {
             ks.dispose();
         }
