@@ -6,7 +6,16 @@ import com.ludo.model.IshodKocke;
 import com.ludo.model.Potez;
 import com.ludo.model.StanjeIgre;
 import com.ludo.model.StatistikaIgraca;
+import com.ludo.model.ModusIgre;
+import com.ludo.model.DogadjajIgre;
+import com.ludo.model.DogadjajIgre.TipDogadjaja;
 import com.ludo.util.BoardUtils;
+
+// DogadjajIgre deklarisan kao CEP event sa timestamp poljem za STREAM mod obrade
+declare DogadjajIgre
+    @role( event )
+    @timestamp( timestamp )
+end
 
 // ============================================================
 // NIVO 1 — INICIJACIJA
@@ -58,6 +67,95 @@ then
     System.out.println("[PRAVILO] Sestica! Igrac " +
         $stanje.getAktivniIgracId() + " dobija bonus roll.");
     modify( $stanje ) { setBonusRoll( true ) }
+end
+
+// ============================================================
+// SEKCIJA 4.3 — DETEKCIJA MODUSA IGRE (salience 85-83)
+// Fires after Level 1 (salience 100-90) and before Level 2 (salience 80).
+// Mod se postavlja jednom po sesiji; modify($stanje) onemogucava dalje aktivacije
+// jer uvjet modus == ModusIgre.NEUTRALNI vise nije ispunjen.
+// ============================================================
+
+// Agresivni modus: protivnik ima >= 3 figure na tabli I >= 1 figuru blizu cilja (< 10 polja)
+rule "Modus: Agresivni"
+    salience 85
+    no-loop true
+when
+    $stanje : StanjeIgre( preskaciPotez == false, modus == ModusIgre.NEUTRALNI, $pid : aktivniIgracId )
+    // Broj protivnickih figura na glavnoj tabli
+    $brNaTabli : Long() from accumulate(
+        $pf : Figura( vlasnikId != $pid, status == StatusFigure.AKTIVNA ),
+        count( $pf )
+    )
+    eval( $brNaTabli >= 3 )
+    // Najmanje jedna protivnicka figura unutar 10 polja od cilja (relPos >= 49)
+    exists Figura( vlasnikId != $pid,
+                   status == StatusFigure.AKTIVNA || status == StatusFigure.FINALNA_STAZA,
+                   relativnaPozicija >= 49 )
+then
+    modify( $stanje ) { setModus( ModusIgre.AGRESIVNI ) }
+    System.out.println("[MODUS] Agresivni modus! Protivnik ima " + $brNaTabli + " figura i jedna je blizu cilja.");
+end
+
+// Defanzivni modus: igrac ima <= 1 figuru na tabli (izlozena pozicija)
+rule "Modus: Defanzivni - malo figura"
+    salience 84
+    no-loop true
+when
+    $stanje : StanjeIgre( preskaciPotez == false, modus == ModusIgre.NEUTRALNI, $pid : aktivniIgracId )
+    $brNase : Long() from accumulate(
+        $f : Figura( vlasnikId == $pid, status == StatusFigure.AKTIVNA ),
+        count( $f )
+    )
+    eval( $brNase <= 1 )
+then
+    modify( $stanje ) { setModus( ModusIgre.DEFANZIVNI ) }
+    System.out.println("[MODUS] Defanzivni modus! Igrac " + $pid + " ima samo " + $brNase + " figuru na tabli.");
+end
+
+// Defanzivni modus: neka nasa nezasticena figura je u dosegu protivnika
+rule "Modus: Defanzivni - figura ugrozena"
+    salience 83
+    no-loop true
+when
+    $stanje : StanjeIgre( preskaciPotez == false, modus == ModusIgre.NEUTRALNI, $pid : aktivniIgracId )
+    $nase   : Figura( vlasnikId == $pid, status == StatusFigure.AKTIVNA,
+                      sigurna == false, $nasAbs : apsolutnaPozicija )
+    exists Figura( vlasnikId != $pid, status == StatusFigure.AKTIVNA,
+                   $protAbs : apsolutnaPozicija,
+                   eval( BoardUtils.jeUDoseguZa( $nasAbs, $protAbs ) ) )
+then
+    modify( $stanje ) { setModus( ModusIgre.DEFANZIVNI ) }
+    System.out.println("[MODUS] Defanzivni modus! Figura " + $nase.getId() +
+        " igraca " + $pid + " ugrozena na poziciji " + $nasAbs + ".");
+end
+
+// Prioritetna prilagodba u AGRESIVNOM modusu (salience 27 — prije standardnih prioriteta na 25-10):
+// Prihvatamo veci rizik — bijeg iz opasne zone se demotira na prioritet 5
+rule "Modus Agresivni: prihvati rizik, smanji prioritet bijega"
+    salience 27
+    no-loop true
+when
+    $stanje : StanjeIgre( preskaciPotez == false, modus == ModusIgre.AGRESIVNI, $pid : aktivniIgracId )
+    $potez  : Potez( validan == true, vlasnikId == $pid, izOpasneZone == true, prioritet == 4 )
+then
+    modify( $potez ) { setPrioritet( 5 ) }
+    System.out.println("[MODUS AGRESIVNI] Bijeg figure " + $potez.getFiguraId() +
+        " iz opasne zone demotiran na prioritet 5 (agresivan pristup).");
+end
+
+// Prioritetna prilagodba u DEFANZIVNOM modusu (salience 27):
+// Svaki potez na sigurno polje postaje prioritet 2
+rule "Modus Defanzivni: sigurno polje prioritet 2"
+    salience 27
+    no-loop true
+when
+    $stanje : StanjeIgre( preskaciPotez == false, modus == ModusIgre.DEFANZIVNI, $pid : aktivniIgracId )
+    $potez  : Potez( validan == true, vlasnikId == $pid, naSignurnoPlje == true, prioritet > 2 )
+then
+    modify( $potez ) { setPrioritet( 2 ) }
+    System.out.println("[MODUS DEFANZIVNI] Figura " + $potez.getFiguraId() +
+        " ide na sigurno polje -> prioritet 2.");
 end
 
 // ============================================================
@@ -320,7 +418,11 @@ when
                       novaFigura == false, prioritet > 3,
                       $figId : figuraId )
     $figura  : Figura( id == $figId, vlasnikId == $pid,
-                       status == StatusFigure.FINALNA_STAZA )
+                       status == StatusFigure.FINALNA_STAZA, $relPoz : relativnaPozicija )
+    // Nema sopstvene figure na finalnoj stazi sa vecim relPos (ova je najbliza cilju)
+    not Figura( vlasnikId == $pid,
+                status == StatusFigure.FINALNA_STAZA,
+                relativnaPozicija > $relPoz )
 then
     modify( $potez ) { setPrioritet( 3 ) }
     System.out.println("[PRIORITET 3] Figura " + $figId + " u finalnoj stazi - prioritet 3");
@@ -743,4 +845,108 @@ when
 then
     $stat.azurirajStilIgre();
     System.out.println("[STAT] Igrac " + $pid + ": " + $stat);
+end
+
+// ============================================================
+// SEKCIJA 6.1 — BACKWARD CHAINING (salience 27 i -18)
+// Query deklarise uslov nedostiznosti cilja.
+// Pravila ga koriste unazad: ako ne postoji figura koja NE moze
+// stici u cilj za N poteza, znaci da je cilj dostiziv za sve.
+// ============================================================
+
+// BC Query: figura koja NE moze doci do cilja za $maxPoteza poteza
+// (minimalan broj poteza = ceil((CILJ - relPos) / 6))
+query "figuraNijeNaDoseguCilja"( int $pid, int $maxPoteza )
+    Figura( vlasnikId == $pid,
+            status == StatusFigure.AKTIVNA || status == StatusFigure.FINALNA_STAZA,
+            $relPos : relativnaPozicija,
+            eval( (BoardUtils.CILJ - $relPos + 5) / 6 > $maxPoteza ) )
+end
+
+// BC: Strateski izvjestaj — provjerava da li su sve figure dostizne u 10 poteza
+// Fires after final selection (salience -10), serves as a strategic status report
+rule "BC: Strateski cilj dostiziv za 10 poteza"
+    salience -18
+    no-loop true
+when
+    $stanje : StanjeIgre( $pid : aktivniIgracId )
+    not figuraNijeNaDoseguCilja( $pid, 10; )
+    exists Figura( vlasnikId == $pid,
+                   status == StatusFigure.AKTIVNA || status == StatusFigure.FINALNA_STAZA )
+then
+    System.out.println("[BC] Strateski cilj dostiziv: sve figure igraca " + $pid +
+        " mogu stici u cilj za 10 poteza!");
+end
+
+// ============================================================
+// SEKCIJA 6.2 — COMPLEX EVENT PROCESSING (salience -20)
+// Fires after final selection (salience -10) i BC izvjestaja (-18).
+// Insertuje DogadjajIgre u radnu memoriju — CEP events u STREAM modu.
+// Svaki event nosi timestamp (System.currentTimeMillis()) za vremensko uredjivanje.
+// ============================================================
+
+// CEP 1: Prijetnja eliminacijom — nasa nezasticena figura je u dosegu protivnika
+// Fires once per threatened piece (not per threatening opponent pair — 'exists' handles dedup)
+rule "CEP: Prijetnja eliminacijom"
+    salience -20
+when
+    $stanje : StanjeIgre( $pid : aktivniIgracId )
+    $nase   : Figura( vlasnikId == $pid, status == StatusFigure.AKTIVNA,
+                      sigurna == false, $nasAbs : apsolutnaPozicija )
+    exists Figura( vlasnikId != $pid, status == StatusFigure.AKTIVNA,
+                   $protAbs : apsolutnaPozicija,
+                   eval( BoardUtils.jeUDoseguZa( $nasAbs, $protAbs ) ) )
+then
+    DogadjajIgre d = new DogadjajIgre(TipDogadjaja.PRIJETNJA_ELIMINACIJOM,
+                                       $pid, $nase.getId(), $nasAbs);
+    insert( d );
+    System.out.println("[CEP] " + d);
+end
+
+// CEP 2: Višestruke sestice — igrac je bacio sesticu >= 2 puta uzastopno
+rule "CEP: Visestruke sestice"
+    salience -20
+    no-loop true
+when
+    $stanje : StanjeIgre( $pid : aktivniIgracId )
+    IshodKocke( vrijednost == 6, uzastopneSestice >= 2 )
+then
+    DogadjajIgre d = new DogadjajIgre(TipDogadjaja.VISESTRUKE_SESTICE, $pid, -1, -1);
+    insert( d );
+    System.out.println("[CEP] " + d);
+end
+
+// CEP 3: Protivnik blizu pobjede — protivnik ima >= 3 figure u finalnoj stazi
+rule "CEP: Protivnik blizu pobjede"
+    salience -20
+    no-loop true
+when
+    $stanje  : StanjeIgre( $pid : aktivniIgracId )
+    $brFinal : Long() from accumulate(
+        $pf : Figura( vlasnikId != $pid, status == StatusFigure.FINALNA_STAZA ),
+        count( $pf )
+    )
+    eval( $brFinal >= 3 )
+then
+    DogadjajIgre d = new DogadjajIgre(TipDogadjaja.PROTIVNIK_BLIZU_POBJEDE, $pid, -1, -1);
+    insert( d );
+    System.out.println("[CEP] " + d + " (" + $brFinal + " figura protivnika u finalnoj stazi)");
+end
+
+// CEP 4: Blokada protivnika na kljucnom polju (abs 40-52) — dvije iste protivnicke figure na jednom polju
+rule "CEP: Blokada protivnika na kljucnom polju"
+    salience -20
+when
+    $stanje : StanjeIgre( $pid : aktivniIgracId )
+    $blok1  : Figura( vlasnikId != $pid, $protId : vlasnikId,
+                      status == StatusFigure.AKTIVNA,
+                      $absP : apsolutnaPozicija,
+                      apsolutnaPozicija >= 40, apsolutnaPozicija <= 52 )
+    exists   Figura( this != $blok1, vlasnikId == $protId,
+                     status == StatusFigure.AKTIVNA,
+                     apsolutnaPozicija == $absP )
+then
+    DogadjajIgre d = new DogadjajIgre(TipDogadjaja.BLOKADA_NA_KLJUCNOM_POLJU, $pid, -1, (int)$absP);
+    insert( d );
+    System.out.println("[CEP] " + d);
 end
