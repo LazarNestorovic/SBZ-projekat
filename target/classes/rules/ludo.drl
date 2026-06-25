@@ -435,3 +435,312 @@ then
     System.out.println("Razlog: " + $stanje.getOdabraniRazlog());
     System.out.println("=======================\n");
 end
+
+// ============================================================
+// SEKCIJA 6.3 — NAPREDNA AKUMULACIJA (salience 43)
+// Annotira poteze sa gustinom i rizik-skorom prije evaluacije
+// ============================================================
+
+// 6.3: Rizik-skor poteza = (1 ako eliminise protivnika) - (broj protivnika koji mogu doseci novu poziciju / 6)
+// Visok pozitivan skor = dobar agresivan potez; negativan = riskantan
+rule "6.3: Rizik-skor poteza"
+    salience 43
+    no-loop true
+when
+    $stanje : StanjeIgre( preskaciPotez == false, $pid : aktivniIgracId )
+    $potez  : Potez( validan == true, vlasnikId == $pid,
+                     novaApsolutnaPozicija > 0, $targetAbs : novaApsolutnaPozicija )
+    // Broj protivnickih figura koje mogu doseci novu poziciju nase figure
+    $brPrijetnji : Long() from accumulate(
+        $pf : Figura( vlasnikId != $pid,
+                      status == StatusFigure.AKTIVNA,
+                      $protAbs : apsolutnaPozicija,
+                      eval( BoardUtils.jeUDoseguZa( $targetAbs, $protAbs ) ) ),
+        count( $pf )
+    )
+then
+    double eliminacijaBonus = $potez.isMozeEliminisati() ? 1.0 : 0.0;
+    double prijetnjaPenalty  = Math.min( $brPrijetnji, 6 ) / 6.0;
+    double skor = eliminacijaBonus - prijetnjaPenalty;
+    modify( $potez ) { setRizikSkor( skor ) }
+    System.out.println("[6.3] Rizik-skor poteza figure " + $potez.getFiguraId() +
+        ": " + String.format("%.2f", skor) +
+        " (eliminira=" + $potez.isMozeEliminisati() + ", prijetnje=" + $brPrijetnji + ")");
+end
+
+// 6.3: Gustina protivnika u kriticnoj zoni (aps. pozicije 40-52)
+// Potez koji odvodi nasu figuru u tu zonu dobija upozorenje u razlogu
+rule "6.3: Gustina protivnika u kriticnoj zoni"
+    salience 43
+    no-loop true
+when
+    $stanje : StanjeIgre( preskaciPotez == false, $pid : aktivniIgracId )
+    $potez  : Potez( validan == true, vlasnikId == $pid,
+                     novaApsolutnaPozicija >= 40, novaApsolutnaPozicija <= 52 )
+    $gustina : Long() from accumulate(
+        $pf : Figura( vlasnikId != $pid,
+                      status == StatusFigure.AKTIVNA,
+                      apsolutnaPozicija >= 40, apsolutnaPozicija <= 52 ),
+        count( $pf )
+    )
+    eval( $gustina >= 2 )
+then
+    modify( $potez ) {
+        setRazlog( $potez.getRazlog() + " [visoka gustina protivnika u kriticnoj zoni: " + $gustina + "]" )
+    }
+    System.out.println("[6.3] Gustina protivnika u kriticnoj zoni: " + $gustina +
+        " figura (potez figure " + $potez.getFiguraId() + ")");
+end
+
+// ============================================================
+// SEKCIJA 5.3 — PRILAGODBA PRIORITETA NA OSNOVU STATISTIKA (salience 26)
+// Fires before Section 4.2 priority rules (salience 25-10)
+// ============================================================
+
+// 5.3: Agresivan stil (stilIgreSkor > 0.6) -> eliminacija dobija prioritet 1 bez obzira na modus
+rule "5.3: Agresivan stil - eliminacija prioritet 1"
+    salience 26
+    no-loop true
+when
+    $stanje : StanjeIgre( preskaciPotez == false, $pid : aktivniIgracId )
+    StatistikaIgraca( igracId == $pid, stilIgreSkor > 0.6 )
+    $potez  : Potez( validan == true, vlasnikId == $pid,
+                     mozeEliminisati == true, prioritet > 1 )
+then
+    modify( $potez ) { setPrioritet( 1 ) }
+    System.out.println("[5.3] Agresivan stil: eliminacija figure " + $potez.getFiguraId() + " -> prioritet 1");
+end
+
+// 5.3: Puno primljenih eliminacija (> 5) -> defanzivno ponasanje: sigurno polje postaje prioritet 2
+rule "5.3: Puno eliminacija primljenih - sigurno polje prioritet 2"
+    salience 26
+    no-loop true
+when
+    $stanje : StanjeIgre( preskaciPotez == false, $pid : aktivniIgracId )
+    StatistikaIgraca( igracId == $pid, eliminacijePrimljene > 5 )
+    $potez  : Potez( validan == true, vlasnikId == $pid,
+                     naSignurnoPlje == true, prioritet > 2 )
+then
+    modify( $potez ) { setPrioritet( 2 ) }
+    System.out.println("[5.3] Previse eliminacija primljenih: sigurno polje figure " + $potez.getFiguraId() + " -> prioritet 2");
+end
+
+// 5.3: Blizu cilja (prosjecna udaljenost < 8) -> samo potezi ka cilju, ostali idu na prioritet 8
+rule "5.3: Blizu cilja - fokus na cilj"
+    salience 26
+    no-loop true
+when
+    $stanje : StanjeIgre( preskaciPotez == false, $pid : aktivniIgracId )
+    StatistikaIgraca( igracId == $pid, prosjUdaljenostOdCilja < 8.0, prosjUdaljenostOdCilja > 0.0 )
+    $potez  : Potez( validan == true, vlasnikId == $pid,
+                     novaFigura == false, prioritet < 8,
+                     $figId : figuraId )
+    $figura : Figura( id == $figId, vlasnikId == $pid,
+                      status != StatusFigure.FINALNA_STAZA )
+then
+    modify( $potez ) { setPrioritet( 8 ) }
+    System.out.println("[5.3] Blizu cilja: potez figure " + $figId + " koji nije ka cilju -> prioritet 8");
+end
+
+// 6.3: Historijska analiza - agresivni obrazac
+// Ako je igrac eliminisao u > 25% poteza I vec ima figuru u cilju, agresivna taktika radi -> pojaci je
+rule "6.3: Historijska analiza - agresivni obrazac"
+    salience 26
+    no-loop true
+when
+    $stanje : StanjeIgre( preskaciPotez == false, $pid : aktivniIgracId )
+    $stat   : StatistikaIgraca( igracId == $pid, ukupnoPoteza >= 5, figureUCilju >= 1,
+                                eval( $stat.getEliminacijeIzvedene() * 1.0 / $stat.getUkupnoPoteza() > 0.25 ) )
+    $potez  : Potez( validan == true, vlasnikId == $pid, mozeEliminisati == true, prioritet > 1 )
+then
+    modify( $potez ) { setPrioritet( 1 ) }
+    System.out.println("[6.3] Historijski agresivni obrazac potvrđen: eliminacija figure " +
+        $potez.getFiguraId() + " -> prioritet 1");
+end
+
+// 6.3: Historijska analiza - defanzivni obrazac
+// Ako je igrac cesto birao sigurna polja (> 40% poteza) I ima figuru u cilju, taktika radi -> pojaci je
+rule "6.3: Historijska analiza - defanzivni obrazac"
+    salience 26
+    no-loop true
+when
+    $stanje : StanjeIgre( preskaciPotez == false, $pid : aktivniIgracId )
+    $stat   : StatistikaIgraca( igracId == $pid, ukupnoPoteza >= 5, figureUCilju >= 1,
+                                eval( $stat.getPoteziNaSigurno() * 1.0 / $stat.getUkupnoPoteza() > 0.4 ) )
+    $potez  : Potez( validan == true, vlasnikId == $pid, naSignurnoPlje == true, prioritet > 2 )
+then
+    modify( $potez ) { setPrioritet( 2 ) }
+    System.out.println("[6.3] Historijski defanzivni obrazac potvrđen: sigurno polje figure " +
+        $potez.getFiguraId() + " -> prioritet 2");
+end
+
+// 5.3: Vise od 2 kreirane blokade -> blokada dobija prioritet 3 cak i bez direktne prijetnje
+rule "5.3: Blokade favorizovane - prioritet 3"
+    salience 26
+    no-loop true
+when
+    $stanje : StanjeIgre( preskaciPotez == false, $pid : aktivniIgracId )
+    StatistikaIgraca( igracId == $pid, blokadeKreirane > 2 )
+    $potez  : Potez( validan == true, vlasnikId == $pid,
+                     prioritet > 3,
+                     razlog contains "[kreira blokadu]" )
+then
+    modify( $potez ) { setPrioritet( 3 ) }
+    System.out.println("[5.3] Blokade favorizovane: potez figure " + $potez.getFiguraId() + " -> prioritet 3");
+end
+
+// ============================================================
+// SEKCIJA 5 — PRACENJE STATISTIKA IGRACA (salience -15 do -17)
+// Fires after final selection (salience -10).
+// VAZNO: Sva pravila koriste direktne Java setter pozive (bez modify/update)
+// da bi sprijecila Drools re-evaluaciju i visestruko okidanje.
+// StatistikaIgraca objekt se dijeli izmedju sesija, pa se vrijednosti akumuliraju
+// automatski kroz vise KieSession poziva.
+// ============================================================
+
+rule "Stat: Broji potez"
+    salience -15
+    no-loop true
+when
+    $stanje : StanjeIgre( odabranaFiguraId != -1, $pid : aktivniIgracId )
+    $stat   : StatistikaIgraca( igracId == $pid )
+then
+    $stat.setUkupnoPoteza( $stat.getUkupnoPoteza() + 1 );
+end
+
+rule "Stat: Broji sestice"
+    salience -15
+    no-loop true
+when
+    $stanje : StanjeIgre( odabranaFiguraId != -1, $pid : aktivniIgracId )
+    $kocka  : IshodKocke( vrijednost == 6 )
+    $stat   : StatistikaIgraca( igracId == $pid )
+then
+    $stat.setBrojSestica( $stat.getBrojSestica() + 1 );
+end
+
+rule "Stat: Uzastopne sestice max"
+    salience -15
+    no-loop true
+when
+    $stanje : StanjeIgre( odabranaFiguraId != -1, $pid : aktivniIgracId )
+    $kocka  : IshodKocke( $uz : uzastopneSestice )
+    $stat   : StatistikaIgraca( igracId == $pid, uzastopneSesticeMax < $uz )
+then
+    $stat.setUzastopneSesticeMax( $uz );
+end
+
+rule "Stat: Eliminacija izvedena"
+    salience -15
+    no-loop true
+when
+    $stanje : StanjeIgre( $pid : aktivniIgracId, $figId : odabranaFiguraId, odabranaFiguraId != -1 )
+    $potez  : Potez( figuraId == $figId, vlasnikId == $pid, mozeEliminisati == true )
+    $stat   : StatistikaIgraca( igracId == $pid )
+then
+    $stat.setEliminacijeIzvedene( $stat.getEliminacijeIzvedene() + 1 );
+    System.out.println("[STAT] Igrac " + $pid + " eliminacija izvedena (ukupno: " + $stat.getEliminacijeIzvedene() + ")");
+end
+
+// Tracking from the victim's side: which player's piece gets eliminated this turn
+rule "Stat: Eliminacija primljena"
+    salience -15
+    no-loop true
+when
+    $stanje : StanjeIgre( $pid : aktivniIgracId, $figId : odabranaFiguraId, odabranaFiguraId != -1 )
+    $potez  : Potez( figuraId == $figId, vlasnikId == $pid, mozeEliminisati == true,
+                     $targetAbs : novaApsolutnaPozicija )
+    // Bind the owner of the piece being eliminated so it can match StatistikaIgraca
+    $zrtva  : Figura( vlasnikId != $pid, status == StatusFigure.AKTIVNA,
+                      apsolutnaPozicija == $targetAbs, sigurna == false,
+                      $zrtvaId : vlasnikId )
+    $stat   : StatistikaIgraca( igracId == $zrtvaId )
+then
+    $stat.setEliminacijePrimljene( $stat.getEliminacijePrimljene() + 1 );
+    System.out.println("[STAT] Igrac " + $zrtvaId + " eliminacija primljena (ukupno: " + $stat.getEliminacijePrimljene() + ")");
+end
+
+rule "Stat: Bonus roll iskoristen"
+    salience -15
+    no-loop true
+when
+    $stanje : StanjeIgre( odabranaFiguraId != -1, bonusRoll == true, $pid : aktivniIgracId )
+    $stat   : StatistikaIgraca( igracId == $pid )
+then
+    $stat.setBonusRollIskoristen( $stat.getBonusRollIskoristen() + 1 );
+end
+
+rule "Stat: Blokada kreirana"
+    salience -15
+    no-loop true
+when
+    $stanje : StanjeIgre( $pid : aktivniIgracId, $figId : odabranaFiguraId, odabranaFiguraId != -1 )
+    $potez  : Potez( figuraId == $figId, vlasnikId == $pid,
+                     razlog contains "[kreira blokadu]" )
+    $stat   : StatistikaIgraca( igracId == $pid )
+then
+    $stat.setBlokadeKreirane( $stat.getBlokadeKreirane() + 1 );
+    System.out.println("[STAT] Igrac " + $pid + " blokada kreirana (ukupno: " + $stat.getBlokadeKreirane() + ")");
+end
+
+rule "Stat: Potez na sigurno"
+    salience -15
+    no-loop true
+when
+    $stanje : StanjeIgre( $pid : aktivniIgracId, $figId : odabranaFiguraId, odabranaFiguraId != -1 )
+    $potez  : Potez( figuraId == $figId, vlasnikId == $pid, naSignurnoPlje == true )
+    $stat   : StatistikaIgraca( igracId == $pid )
+then
+    $stat.setPoteziNaSigurno( $stat.getPoteziNaSigurno() + 1 );
+end
+
+rule "Stat: Figura u cilju"
+    salience -15
+    no-loop true
+when
+    $stanje : StanjeIgre( $pid : aktivniIgracId, $figId : odabranaFiguraId, odabranaFiguraId != -1 )
+    $potez  : Potez( figuraId == $figId, vlasnikId == $pid,
+                     novaRelativnaPozicija == BoardUtils.CILJ )
+    $stat   : StatistikaIgraca( igracId == $pid )
+then
+    $stat.setFigureUCilju( $stat.getFigureUCilju() + 1 );
+    System.out.println("[STAT] Igrac " + $pid + " figura u cilju! (ukupno: " + $stat.getFigureUCilju() + ")");
+end
+
+// Prosjecna udaljenost od cilja = prosjek (58 - relPos) za sve aktivne figure i figure u finalnoj stazi
+rule "Stat: Prosjecna udaljenost od cilja"
+    salience -16
+    no-loop true
+when
+    $stanje : StanjeIgre( odabranaFiguraId != -1, $pid : aktivniIgracId )
+    $stat   : StatistikaIgraca( igracId == $pid )
+    $ukupnaUdaljenost : Double() from accumulate(
+        $f : Figura( vlasnikId == $pid,
+                     status == StatusFigure.AKTIVNA || status == StatusFigure.FINALNA_STAZA,
+                     $rp : relativnaPozicija ),
+        sum( (double)(BoardUtils.CILJ - $rp) )
+    )
+    $brFigura : Long() from accumulate(
+        $f2 : Figura( vlasnikId == $pid,
+                      status == StatusFigure.AKTIVNA || status == StatusFigure.FINALNA_STAZA ),
+        count( $f2 )
+    )
+    eval( $brFigura > 0 )
+then
+    double prosjek = $ukupnaUdaljenost / $brFigura;
+    $stat.azurirajProsjUdaljenost( prosjek );
+end
+
+// Mora biti zadnje statisticko pravilo — azurira stil igre na osnovu svih prethodnih direktnih upisa.
+// Uvjet ukupnoPoteza > 0 se evaluira na pocetku sesije (Drools ne vidi direktne setter pozive kao promjenu).
+// Na prvom potezu igraca (ukupnoPoteza==0) pravilo nece okidati; od drugog poteza nadalje okida ispravno.
+rule "Stat: Azuriraj stil igre"
+    salience -17
+    no-loop true
+when
+    $stanje : StanjeIgre( odabranaFiguraId != -1, $pid : aktivniIgracId )
+    $stat   : StatistikaIgraca( igracId == $pid, ukupnoPoteza > 0 )
+then
+    $stat.azurirajStilIgre();
+    System.out.println("[STAT] Igrac " + $pid + ": " + $stat);
+end

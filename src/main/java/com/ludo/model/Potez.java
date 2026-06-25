@@ -12,6 +12,7 @@ public class Potez {
     private boolean mozeEliminisati;   // da li ovaj potez eliminise protivnika
     private boolean naSignurnoPlje;    // da li je ciljna pozicija sigurno polje
     private boolean izOpasneZone;      // da li potez premjesta figuru iz opasne zone
+    private double rizikSkor;          // (sansa eliminacije protivnika) - (sansa nase eliminacije)
     private String razlog;
 
     public Potez() {
@@ -49,6 +50,9 @@ public class Potez {
 
     public boolean isIzOpasneZone() { return izOpasneZone; }
     public void setIzOpasneZone(boolean izOpasneZone) { this.izOpasneZone = izOpasneZone; }
+
+    public double getRizikSkor() { return rizikSkor; }
+    public void setRizikSkor(double rizikSkor) { this.rizikSkor = rizikSkor; }
 
     public String getRazlog() { return razlog; }
     public void setRazlog(String razlog) { this.razlog = razlog; }
