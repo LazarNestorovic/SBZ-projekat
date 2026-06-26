@@ -1,0 +1,56 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: sans-serif; background: #1a1a2e; color: #eee; }
+
+header { padding: 12px 20px; background: #16213e; display: flex; align-items: center; gap: 12px; }
+header h1 { font-size: 1.3rem; }
+#game-id-label { font-size: 0.8rem; color: #888; }
+
+main { display: flex; gap: 16px; padding: 16px; }
+
+#board-section { flex-shrink: 0; }
+#board { border: 2px solid #444; border-radius: 4px; }
+
+#panels { flex: 1; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; max-height: 700px; }
+
+.panel { background: #16213e; border-radius: 8px; padding: 12px; }
+.panel h2 { font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; color: #888; margin-bottom: 8px; }
+
+#dice-display { font-size: 2.5rem; text-align: center; margin: 6px 0; }
+
+.badge { display: inline-block; padding: 3px 10px; border-radius: 12px;
+         font-size: 0.75rem; font-weight: bold; margin: 2px; }
+.badge.hidden { display: none; }
+.neutralni  { background: #2d4a6e; color: #7eb8f7; }
+.agresivni  { background: #6e2d2d; color: #f77e7e; }
+.defanzivni { background: #2d5a2d; color: #7ef77e; }
+.bonus      { background: #6e5a2d; color: #f7d67e; }
+.preskaci   { background: #4a2d6e; color: #c77ef7; }
+
+#turn-info { font-size: 0.85rem; line-height: 1.8; margin: 8px 0; }
+
+button { width: 100%; padding: 8px; margin-top: 6px; border: none; border-radius: 4px;
+         cursor: pointer; font-size: 0.9rem; font-weight: bold; }
+#btn-roll { background: #0f3460; color: #fff; }
+#btn-roll:hover { background: #1a5276; }
+#btn-roll:disabled { background: #333; color: #666; cursor: not-allowed; }
+#btn-new  { background: #333; color: #aaa; }
+
+#events-log { list-style: none; font-size: 0.8rem; max-height: 140px; overflow-y: auto; }
+#events-log li { padding: 3px 6px; border-left: 3px solid #444; margin: 2px 0; }
+#events-log li.PRIJETNJA_ELIMINACIJOM  { border-color: #f77e7e; }
+#events-log li.PRILIKE_ZA_ELIMINACIJU  { border-color: #f7b07e; }
+#events-log li.FIGURA_U_OPASNOJ_ZONI   { border-color: #f7d67e; }
+#events-log li.PROTIVNIK_BLIZU_POBJEDE { border-color: #c77ef7; }
+#events-log li.VISESTRUKE_SESTICE      { border-color: #7ef7c7; }
+#events-log li.BLOKADA_NA_KLJUCNOM_POLJU { border-color: #7eb8f7; }
+
+#stats-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+#stats-table th, #stats-table td { padding: 4px 6px; text-align: center; border-bottom: 1px solid #333; }
+#stats-table th { color: #888; }
+.player-0 { color: #e74c3c; }
+.player-1 { color: #3498db; }
+.player-2 { color: #f1c40f; }
+.player-3 { color: #2ecc71; }
+
+#winner-panel { text-align: center; padding: 24px; }
+#winner-panel h2 { font-size: 1.8rem; }
