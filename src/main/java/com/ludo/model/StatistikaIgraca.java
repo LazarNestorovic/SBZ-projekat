@@ -3,6 +3,8 @@ package com.ludo.model;
 public class StatistikaIgraca {
 
     private int igracId;
+
+    // Sekcija 5.1 — statistike unutar jedne partije (akumuliraju se potez po potez)
     private int ukupnoPoteza;
     private int brojSestica;
     private int uzastopneSesticeMax;
@@ -15,8 +17,46 @@ public class StatistikaIgraca {
     private int poteziNaSigurno;
     private double stilIgreSkor; // (eliminacije*2 - poteziNaSigurno) / ukupnoPoteza
 
+    // Sekcija 5.2 — medjupartijske statistike (akumuliraju se partija po partija)
+    private int totalPartija;
+    private int totalPobjeda;
+    private int totalPotezaSvihPartija;
+    private int potezaUTrenutnojPartiji;   // resetuje se pozivom zavrsiPartiju()
+    private int najduzaPartija;
+    private int najkracaPartija;
+
     public StatistikaIgraca(int igracId) {
         this.igracId = igracId;
+    }
+
+    // Sekcija 5.2 — poziva se na kraju svake partije (pobjeda ili poraz)
+    public void zavrsiPartiju(boolean pobjeda) {
+        totalPartija++;
+        if (pobjeda) totalPobjeda++;
+        totalPotezaSvihPartija += potezaUTrenutnojPartiji;
+        if (najkracaPartija == 0 || potezaUTrenutnojPartiji < najkracaPartija)
+            najkracaPartija = potezaUTrenutnojPartiji;
+        if (potezaUTrenutnojPartiji > najduzaPartija)
+            najduzaPartija = potezaUTrenutnojPartiji;
+        potezaUTrenutnojPartiji = 0;
+    }
+
+    public double getWinRate() {
+        return totalPartija == 0 ? 0.0 : (double) totalPobjeda / totalPartija * 100;
+    }
+
+    public double getProsjecnoTrajanje() {
+        return totalPartija == 0 ? 0.0 : (double) totalPotezaSvihPartija / totalPartija;
+    }
+
+    public double getProsjecnoEliminacija() {
+        return totalPartija == 0 ? 0.0 : (double) eliminacijeIzvedene / totalPartija;
+    }
+
+    public String getOmiljeniStil() {
+        if (stilIgreSkor > 0.6)  return "agresivan";
+        if (stilIgreSkor < -0.3) return "defanzivan";
+        return "balansiran";
     }
 
     // Azurira stil igre skor nakon svakog poteza
@@ -71,15 +111,45 @@ public class StatistikaIgraca {
     public double getStilIgreSkor() { return stilIgreSkor; }
     public void setStilIgreSkor(double s) { this.stilIgreSkor = s; }
 
+    public int getTotalPartija() { return totalPartija; }
+    public void setTotalPartija(int t) { this.totalPartija = t; }
+
+    public int getTotalPobjeda() { return totalPobjeda; }
+    public void setTotalPobjeda(int t) { this.totalPobjeda = t; }
+
+    public int getTotalPotezaSvihPartija() { return totalPotezaSvihPartija; }
+    public void setTotalPotezaSvihPartija(int t) { this.totalPotezaSvihPartija = t; }
+
+    public int getPotezaUTrenutnojPartiji() { return potezaUTrenutnojPartiji; }
+    public void setPotezaUTrenutnojPartiji(int p) { this.potezaUTrenutnojPartiji = p; }
+
+    public int getNajduzaPartija() { return najduzaPartija; }
+    public void setNajduzaPartija(int n) { this.najduzaPartija = n; }
+
+    public int getNajkracaPartija() { return najkracaPartija; }
+    public void setNajkracaPartija(int n) { this.najkracaPartija = n; }
+
     @Override
     public String toString() {
-        return String.format(
+        StringBuilder sb = new StringBuilder();
+        sb.append(String.format(
             "StatistikaIgraca{igrac=%d, poteza=%d, sestice=%d, " +
             "eliminacijeIzvedene=%d, eliminacijePrimljene=%d, " +
-            "figureUCilju=%d, blokade=%d, stilSkor=%.2f}",
+            "figureUCilju=%d, blokade=%d, stilSkor=%.2f",
             igracId, ukupnoPoteza, brojSestica,
             eliminacijeIzvedene, eliminacijePrimljene,
             figureUCilju, blokadeKreirane, stilIgreSkor
-        );
+        ));
+        if (totalPartija > 0) {
+            sb.append(String.format(
+                ", [5.2] partija=%d, pobjeda=%d(%.0f%%), prosjecnoTrajanje=%.1f, " +
+                "najduza=%d, najkraca=%d, prosjecnoEliminacija=%.2f, omiljeniStil=%s",
+                totalPartija, totalPobjeda, getWinRate(),
+                getProsjecnoTrajanje(), najduzaPartija, najkracaPartija,
+                getProsjecnoEliminacija(), getOmiljeniStil()
+            ));
+        }
+        sb.append("}");
+        return sb.toString();
     }
 }

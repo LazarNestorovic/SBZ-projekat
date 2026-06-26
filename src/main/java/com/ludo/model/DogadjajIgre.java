@@ -4,8 +4,10 @@ public class DogadjajIgre {
 
     public enum TipDogadjaja {
         PRIJETNJA_ELIMINACIJOM,
+        PRILIKE_ZA_ELIMINACIJU,
         VISESTRUKE_SESTICE,
         PROTIVNIK_BLIZU_POBJEDE,
+        FIGURA_U_OPASNOJ_ZONI,
         BLOKADA_NA_KLJUCNOM_POLJU
     }
 

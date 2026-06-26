@@ -691,14 +691,43 @@ then
     System.out.println("[5.3] Blokade favorizovane: potez figure " + $potez.getFiguraId() + " -> prioritet 3");
 end
 
+// 5.3: Igrac rijetko konvertuje bonus rollove u eliminacije (< 0.3 ratio)
+// Konzervativniji pristup: sigurno polje se tretira kao prioritet 3 (isti nivo kao finalna staza)
+// Time se smanjuje sklonost ka riziku kad bonus rollovi historijski ne donose dobit
+rule "5.3: Niska konverzija bonus rolla - preferira sigurno"
+    salience 26
+    no-loop true
+when
+    $stanje : StanjeIgre( preskaciPotez == false, $pid : aktivniIgracId )
+    $stat   : StatistikaIgraca( igracId == $pid, eliminacijeIzvedene > 0 )
+    eval( (double) $stat.getBonusRollIskoristen() / $stat.getEliminacijeIzvedene() < 0.3 )
+    $potez  : Potez( validan == true, vlasnikId == $pid, naSignurnoPlje == true, prioritet > 3 )
+then
+    modify( $potez ) { setPrioritet( 3 ) }
+    System.out.println("[5.3] Niska konverzija bonus rolla (" +
+        $stat.getBonusRollIskoristen() + "/" + $stat.getEliminacijeIzvedene() +
+        " < 0.3): sigurno polje -> prioritet 3");
+end
+
 // ============================================================
-// SEKCIJA 5 — PRACENJE STATISTIKA IGRACA (salience -15 do -17)
+// SEKCIJA 5 — PRACENJE STATISTIKA IGRACA (salience -14 do -19)
 // Fires after final selection (salience -10).
 // VAZNO: Sva pravila koriste direktne Java setter pozive (bez modify/update)
 // da bi sprijecila Drools re-evaluaciju i visestruko okidanje.
 // StatistikaIgraca objekt se dijeli izmedju sesija, pa se vrijednosti akumuliraju
 // automatski kroz vise KieSession poziva.
 // ============================================================
+
+// Sekcija 5.2: Broji poteze unutar trenutne partije (salience -14, okida se prvi)
+rule "Stat 5.2: Broji poteze u partiji"
+    salience -14
+    no-loop true
+when
+    $stanje : StanjeIgre( odabranaFiguraId != -1, $pid : aktivniIgracId )
+    $stat   : StatistikaIgraca( igracId == $pid )
+then
+    $stat.setPotezaUTrenutnojPartiji( $stat.getPotezaUTrenutnojPartiji() + 1 );
+end
 
 rule "Stat: Broji potez"
     salience -15
@@ -847,11 +876,38 @@ then
     System.out.println("[STAT] Igrac " + $pid + ": " + $stat);
 end
 
+// Sekcija 5.2: Detekcija pobjede — 3 figure su vec ZAVRSENE + odabrani potez vodi 4. u CILJ
+// Salience -19: okida se NAKON svih stat pravila (-14 do -17), a PRIJE CEP eventa (-20)
+// zavrsiPartiju(true) finalizuje medjupartijsku statistiku i resetuje potezaUTrenutnojPartiji
+rule "Stat 5.2: Pobjeda u partiji"
+    salience -19
+    no-loop true
+when
+    $stanje : StanjeIgre( odabranaFiguraId != -1, $pid : aktivniIgracId )
+    $stat   : StatistikaIgraca( igracId == $pid )
+    $brZavrsena : Long() from accumulate(
+        $f : Figura( vlasnikId == $pid, status == StatusFigure.ZAVRSENA ),
+        count( $f )
+    )
+    Potez( vlasnikId == $pid, figuraId == $stanje.getOdabranaFiguraId(),
+           novaRelativnaPozicija == BoardUtils.CILJ )
+    eval( $brZavrsena == 3 )
+then
+    $stat.zavrsiPartiju( true );
+    System.out.println("[STAT 5.2] POBJEDA igraca " + $pid +
+        "! Partija " + $stat.getTotalPartija() +
+        " zavrsena za " + $stat.getNajduzaPartija() + " poteza." +
+        " Ukupno pobjeda: " + $stat.getTotalPobjeda() +
+        " (win rate: " + String.format("%.0f", $stat.getWinRate()) + "%)");
+    System.out.println("[STAT 5.2] " + $stat);
+end
+
 // ============================================================
 // SEKCIJA 6.1 — BACKWARD CHAINING (salience 27 i -18)
 // Query deklarise uslov nedostiznosti cilja.
-// Pravila ga koriste unazad: ako ne postoji figura koja NE moze
-// stici u cilj za N poteza, znaci da je cilj dostiziv za sve.
+// Dvije strategije izvedene unazad:
+//   1) Ako NEMA figure koja ne moze stici za 10 poteza → cilj dostiziv (izvjestaj na -18)
+//   2) Ako POSTOJI figura koja ne moze stici za 10 poteza → fallback: eliminisi protivnika (salience 27)
 // ============================================================
 
 // BC Query: figura koja NE moze doci do cilja za $maxPoteza poteza
@@ -861,6 +917,27 @@ query "figuraNijeNaDoseguCilja"( int $pid, int $maxPoteza )
             status == StatusFigure.AKTIVNA || status == StatusFigure.FINALNA_STAZA,
             $relPos : relativnaPozicija,
             eval( (BoardUtils.CILJ - $relPos + 5) / 6 > $maxPoteza ) )
+end
+
+// BC Fallback (salience 27 — prije standardnih prioriteta):
+// Kratkorocni strateski cilj: dostici CILJ za 5 poteza. Ako je barem jedna figura previse
+// daleko (> 5 poteza), alternativna strategija je eliminacija najblizeg protivnika.
+// Prag 5 poteza (relPos < 33) odabran jer odgovara "dobroj poziciji" za kraj partije.
+rule "BC: Fallback - cilj nedostiziv za 5 poteza, eliminisi protivnika"
+    salience 27
+    no-loop true
+when
+    $stanje : StanjeIgre( preskaciPotez == false, $pid : aktivniIgracId )
+    // Postoji figura koja ne moze doseci cilj za 5 poteza (pozitivni poziv figuraNijeNaDoseguCilja s pragom 5)
+    exists Figura( vlasnikId == $pid,
+                   status == StatusFigure.AKTIVNA || status == StatusFigure.FINALNA_STAZA,
+                   $rp : relativnaPozicija,
+                   eval( (BoardUtils.CILJ - $rp + 5) / 6 > 5 ) )
+    $potez  : Potez( validan == true, vlasnikId == $pid, mozeEliminisati == true, prioritet > 1 )
+then
+    modify( $potez ) { setPrioritet( 1 ) }
+    System.out.println("[BC] Fallback: figura ne moze doseci cilj za 5 poteza - " +
+        "eliminisi protivnika (figura " + $potez.getFiguraId() + " -> prioritet 1)");
 end
 
 // BC: Strateski izvjestaj — provjerava da li su sve figure dostizne u 10 poteza
@@ -947,6 +1024,41 @@ when
                      apsolutnaPozicija == $absP )
 then
     DogadjajIgre d = new DogadjajIgre(TipDogadjaja.BLOKADA_NA_KLJUCNOM_POLJU, $pid, -1, (int)$absP);
+    insert( d );
+    System.out.println("[CEP] " + d);
+end
+
+// CEP 5: Prilike za eliminaciju — nasa figura je na polju N odakle bacajem 1-6 doseze protivnicku figuru
+// (protivnik mora biti na nezasticenom polju — nije na zvijezdi niti iza blokade)
+rule "CEP: Prilike za eliminaciju"
+    salience -20
+when
+    $stanje : StanjeIgre( $pid : aktivniIgracId )
+    $nase   : Figura( vlasnikId == $pid, status == StatusFigure.AKTIVNA,
+                      $nasAbs : apsolutnaPozicija )
+    $prot   : Figura( vlasnikId != $pid, status == StatusFigure.AKTIVNA,
+                      sigurna == false, $protAbs : apsolutnaPozicija,
+                      eval( BoardUtils.jeUDoseguZa( $protAbs, $nasAbs ) ) )
+then
+    DogadjajIgre d = new DogadjajIgre(TipDogadjaja.PRILIKE_ZA_ELIMINACIJU,
+                                       $pid, $nase.getId(), (int)$protAbs);
+    insert( d );
+    System.out.println("[CEP] " + d);
+end
+
+// CEP 6: Nasa figura u opasnoj zoni — figura na nesigurnom polju bez sopstvene blokade
+rule "CEP: Nasa figura u opasnoj zoni"
+    salience -20
+when
+    $stanje : StanjeIgre( $pid : aktivniIgracId )
+    $nase   : Figura( vlasnikId == $pid, status == StatusFigure.AKTIVNA,
+                      sigurna == false, $nasAbs : apsolutnaPozicija )
+    // Nema sopstvene figure na istom polju (koja bi formirala blokadu i stostila nasu)
+    not Figura( this != $nase, vlasnikId == $pid, status == StatusFigure.AKTIVNA,
+                apsolutnaPozicija == $nasAbs )
+then
+    DogadjajIgre d = new DogadjajIgre(TipDogadjaja.FIGURA_U_OPASNOJ_ZONI,
+                                       $pid, $nase.getId(), (int)$nasAbs);
     insert( d );
     System.out.println("[CEP] " + d);
 end
