@@ -26,6 +26,8 @@ public class Main {
         scenarijoModusDefanzivni(kc);
         scenarijoBackwardChaining(kc);
         scenarijoCEP(kc);
+        scenarijoBCFallback(kc);
+        scenarijoMedjupartijskeStatistike(kc);
     }
 
     // -------------------------------------------------------
@@ -518,6 +520,157 @@ public class Main {
         } finally {
             ks.dispose();
         }
+        System.out.println();
+    }
+
+    // -------------------------------------------------------
+    // Scenarijo 12: BC Fallback — figura previse daleko od cilja
+    // Igrac 0 ima jednu figuru tek na relPos=10 (treba 8 poteza, > 5 prag).
+    // Postoji i eliminacioni potez. BC fallback treba promovirati eliminaciju na prioritet 1.
+    // -------------------------------------------------------
+    static void scenarijoBCFallback(KieContainer kc) {
+        System.out.println("--- SCENARIJO 12: BC Fallback - eliminisi jer cilj nije blizu (6.1) ---");
+
+        KieSession ks = kc.newKieSession("ludoKsession");
+        try {
+            StanjeIgre stanje = new StanjeIgre(0);
+
+            // Igrac 0: figura A daleko od cilja (relPos=10, treba 8 poteza — vise od praga 5)
+            //          figura B moze eliminisati protivnika (relPos=18, dice=6 -> relPos=24)
+            Figura f0a = new Figura(0, 0);
+            f0a.updatePozicija(10);   // relPos=10: (58-10+5)/6 = 53/6 = 8 > 5 → fallback aktiviran
+
+            Figura f0b = new Figura(1, 0);
+            f0b.updatePozicija(18);   // absPos=(1+18-2)%52+1=18; dice=6 -> relPos=24, absPos=24 → eliminacija
+
+            // Igrac 1: figura na absPos=24 (nezasticena) → bice eliminisana
+            Figura f1a = new Figura(2, 1);
+            f1a.updatePozicija(11);   // absPos=(14+11-2)%52+1=24
+
+            IshodKocke kocka = new IshodKocke(6, 1);
+
+            StatistikaIgraca stat0 = new StatistikaIgraca(0);
+            StatistikaIgraca stat1 = new StatistikaIgraca(1);
+
+            System.out.println("Igrac 0: f0a relPos=10 (daleko, 8 poteza do cilja > prag 5)");
+            System.out.println("         f0b relPos=18 moze eliminisati f1a na absPos=24");
+            System.out.println("BC Fallback treba promovirati eliminaciju na prioritet 1.");
+            System.out.println("Kocka: " + kocka);
+            System.out.println();
+
+            ks.insert(stanje);
+            ks.insert(f0a); ks.insert(f0b);
+            ks.insert(f1a);
+            ks.insert(kocka);
+            ks.insert(stat0); ks.insert(stat1);
+
+            ks.fireAllRules();
+
+            System.out.println("Rezultat: " + stanje);
+            System.out.println("Ocekivano: figura 1 (f0b) selektovana sa eliminacijom (BC Fallback prioritet 1)");
+        } finally {
+            ks.dispose();
+        }
+        System.out.println();
+    }
+
+    // -------------------------------------------------------
+    // Scenarijo 13: Medjupartijske statistike (Sekcija 5.2)
+    // Simulira tri poteza unutar "partije" pa pobjednicki potez.
+    // Provjerava da StatistikaIgraca.zavrsiPartiju() ispravno akumulira
+    // totalPartija, totalPobjeda, najduzaPartija, i winRate.
+    // -------------------------------------------------------
+    static void scenarijoMedjupartijskeStatistike(KieContainer kc) {
+        System.out.println("--- SCENARIJO 13: Medjupartijske statistike (5.2) ---");
+
+        StatistikaIgraca stat0 = new StatistikaIgraca(0);
+
+        // Partija 1 — igrac pobijedi (sve 4 figure u cilju)
+        System.out.println("  -- Partija 1 --");
+
+        // Potez 1: obican potez (1 od 3 figure vec ZAVRSENA)
+        {
+            KieSession ks = kc.newKieSession("ludoKsession");
+            try {
+                StanjeIgre stanje = new StanjeIgre(0);
+                Figura fA = new Figura(0, 0); fA.updatePozicija(58); // vec ZAVRSENA
+                Figura fB = new Figura(1, 0); fB.updatePozicija(30); // aktivna
+                Figura fC = new Figura(2, 0); fC.updatePozicija(20); // aktivna
+                Figura fD = new Figura(3, 0); fD.updatePozicija(55); // finalna staza
+                IshodKocke kocka = new IshodKocke(3, 0);
+                ks.insert(stanje); ks.insert(fA); ks.insert(fB); ks.insert(fC); ks.insert(fD);
+                ks.insert(kocka); ks.insert(stat0);
+                ks.fireAllRules();
+                System.out.println("  Potez 1 zavrsio: potezaUTrenutnojPartiji=" + stat0.getPotezaUTrenutnojPartiji());
+            } finally { ks.dispose(); }
+        }
+
+        // Potez 2: obican potez (2 figure ZAVRSENE, 1 aktivna, 1 finalna staza)
+        {
+            KieSession ks = kc.newKieSession("ludoKsession");
+            try {
+                StanjeIgre stanje = new StanjeIgre(0);
+                Figura fA = new Figura(0, 0); fA.updatePozicija(58); // ZAVRSENA
+                Figura fB = new Figura(1, 0); fB.updatePozicija(58); // ZAVRSENA
+                Figura fC = new Figura(2, 0); fC.updatePozicija(20); // aktivna
+                Figura fD = new Figura(3, 0); fD.updatePozicija(56); // finalna staza
+                IshodKocke kocka = new IshodKocke(2, 0);
+                ks.insert(stanje); ks.insert(fA); ks.insert(fB); ks.insert(fC); ks.insert(fD);
+                ks.insert(kocka); ks.insert(stat0);
+                ks.fireAllRules();
+                System.out.println("  Potez 2 zavrsio: potezaUTrenutnojPartiji=" + stat0.getPotezaUTrenutnojPartiji());
+            } finally { ks.dispose(); }
+        }
+
+        // Potez 3 (pobjednicki): 3 figure ZAVRSENE, 1 figura na relPos=56, dice=2 -> relPos=58 (CILJ)
+        // Ocekujemo: "Stat 5.2: Pobjeda u partiji" okida, zavrsiPartiju(true) se poziva
+        {
+            KieSession ks = kc.newKieSession("ludoKsession");
+            try {
+                StanjeIgre stanje = new StanjeIgre(0);
+                Figura fA = new Figura(0, 0); fA.updatePozicija(58); // ZAVRSENA
+                Figura fB = new Figura(1, 0); fB.updatePozicija(58); // ZAVRSENA
+                Figura fC = new Figura(2, 0); fC.updatePozicija(58); // ZAVRSENA
+                Figura fD = new Figura(3, 0); fD.updatePozicija(56); // finalna staza, 2 polja od cilja
+                IshodKocke kocka = new IshodKocke(2, 0);
+                ks.insert(stanje); ks.insert(fA); ks.insert(fB); ks.insert(fC); ks.insert(fD);
+                ks.insert(kocka); ks.insert(stat0);
+                ks.fireAllRules();
+                System.out.println("  Potez 3 (pobjednicki) rezultat: " + stanje);
+            } finally { ks.dispose(); }
+        }
+
+        System.out.println();
+        System.out.println("  -- Partija 2 (nova partija sa istim stat objektom) --");
+
+        // Partija 2 — igrac gubi (nema detekcije u DRL — simuliramo poraz pozivom zavrsiPartiju(false))
+        {
+            KieSession ks = kc.newKieSession("ludoKsession");
+            try {
+                StanjeIgre stanje = new StanjeIgre(0);
+                Figura fA = new Figura(0, 0); fA.updatePozicija(10); // aktivna
+                Figura fB = new Figura(1, 0); fB.updatePozicija(20); // aktivna
+                IshodKocke kocka = new IshodKocke(4, 0);
+                ks.insert(stanje); ks.insert(fA); ks.insert(fB);
+                ks.insert(kocka); ks.insert(stat0);
+                ks.fireAllRules();
+                System.out.println("  Potez partije 2: potezaUTrenutnojPartiji=" + stat0.getPotezaUTrenutnojPartiji());
+            } finally { ks.dispose(); }
+        }
+        // Poraz — protivnik je pobijedio, zavrsavamo partiju iz Jave
+        stat0.zavrsiPartiju(false);
+        System.out.println("  Partija 2 zavrsena (poraz). Pozvano zavrsiPartiju(false).");
+
+        System.out.println();
+        System.out.println("=== Finalne medjupartijske statistike igraca 0 ===");
+        System.out.println(stat0);
+        System.out.println("  totalPartija  : " + stat0.getTotalPartija() + " (ocekivano: 2)");
+        System.out.println("  totalPobjeda  : " + stat0.getTotalPobjeda() + " (ocekivano: 1)");
+        System.out.println("  winRate       : " + String.format("%.0f", stat0.getWinRate()) + "% (ocekivano: 50%)");
+        System.out.println("  najduzaPartija: " + stat0.getNajduzaPartija() + " poteza");
+        System.out.println("  najkracaPartija: " + stat0.getNajkracaPartija() + " poteza");
+        System.out.println("  prosjecnoTrajanje: " + String.format("%.1f", stat0.getProsjecnoTrajanje()));
+        System.out.println("  omiljeniStil  : " + stat0.getOmiljeniStil());
         System.out.println();
     }
 
