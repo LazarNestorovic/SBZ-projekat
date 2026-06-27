@@ -54,9 +54,26 @@ public class StatistikaIgraca {
     }
 
     public String getOmiljeniStil() {
-        if (stilIgreSkor > 0.6)  return "agresivan";
-        if (stilIgreSkor < -0.3) return "defanzivan";
+        if (stilIgreSkor > 0.15)  return "agresivan";
+        if (stilIgreSkor < -0.10) return "defanzivan";
         return "balansiran";
+    }
+
+    // Resets per-game counters for a fresh game while preserving cross-game totals.
+    public void resetZaNoviGame() {
+        ukupnoPoteza         = 0;
+        brojSestica          = 0;
+        uzastopneSesticeMax  = 0;
+        eliminacijeIzvedene  = 0;
+        eliminacijePrimljene = 0;
+        figureUCilju         = 0;
+        bonusRollIskoristen  = 0;
+        blokadeKreirane      = 0;
+        prosjUdaljenostOdCilja = 0.0;
+        poteziNaSigurno      = 0;
+        stilIgreSkor         = 0.0;
+        // potezaUTrenutnojPartiji stays 0 (already reset by zavrsiPartiju)
+        // totalPartija / totalPobjeda / totalPotezaSvihPartija / najduza/najkraca — KEPT
     }
 
     // Azurira stil igre skor nakon svakog poteza

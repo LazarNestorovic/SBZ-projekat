@@ -449,11 +449,13 @@ then
 end
 
 // Prioritet 4: Pomjeri figuru iz opasne zone (sljedece polje je protivnik)
+// Guard: ne aplicirati u AGRESIVNOM modusu — tamo Modus Agresivni vec snizuje ovaj prioritet
+// na 5, a bez guarda nastaje petlja: Modus(27) postavlja na 5, Prioritet4(21) vraca na 4.
 rule "Prioritet 4: Bijeg iz opasne zone"
     salience 21
     no-loop true
 when
-    $stanje : StanjeIgre( $pid : aktivniIgracId )
+    $stanje : StanjeIgre( $pid : aktivniIgracId, modus != ModusIgre.AGRESIVNI )
     $potez  : Potez( validan == true, vlasnikId == $pid,
                      izOpasneZone == true, prioritet > 4 )
 then
@@ -628,6 +630,10 @@ then
 end
 
 // 5.3: Blizu cilja (prosjecna udaljenost < 8) -> samo potezi ka cilju, ostali idu na prioritet 8
+// Guard: koristimo prioritet == 7 (samo defaultni prioritet) da izbjegnemo petlju.
+// Sa prioritet < 8: mode-pravila (27) i priority-pravila (23-19) vracaju prioritet na 2/3/6,
+// sto ponovo aktivira ovo pravilo -> beskonacna petlja. Sa prioritet == 7 (jedinstven default),
+// nijedno drugo pravilo ne vraca prioritet na 7, pa se petlja ne moze formirati.
 rule "5.3: Blizu cilja - fokus na cilj"
     salience 26
     no-loop true
@@ -635,7 +641,7 @@ when
     $stanje : StanjeIgre( preskaciPotez == false, $pid : aktivniIgracId )
     StatistikaIgraca( igracId == $pid, prosjUdaljenostOdCilja < 8.0, prosjUdaljenostOdCilja > 0.0 )
     $potez  : Potez( validan == true, vlasnikId == $pid,
-                     novaFigura == false, prioritet < 8,
+                     novaFigura == false, prioritet == 7,
                      $figId : figuraId )
     $figura : Figura( id == $figId, vlasnikId == $pid,
                       status != StatusFigure.FINALNA_STAZA )
