@@ -1,155 +1,226 @@
-// game.js — API calls, dice rolling, game loop
-// Person B: wire animateMove() and highlightCandidates() from board.js
+// game.js — one AI turn per button click, with optional auto-play
 
-let gameId = null;
-let rolling = false;
+let gameId   = null;
+let gameOver = false;
+let rolling  = false;  // true while a turn is in progress
 
-const PLAYER_NAMES = ['Crveni', 'Plavi', 'Zuti', 'Zeleni'];
+let autoPlay  = false;
+let autoTimer = null;
+const AUTO_DELAY_MS = 1200;  // ms between auto turns
+
+const DICE_SHOW_MS  = 500;
+const CANDIDATES_MS = 400;
+
+// ── Game lifecycle ─────────────────────────────────────────────────────────
 
 async function newGame() {
-    const res = await fetch('/api/game/new', { method: 'POST' });
-    const data = await res.json();
-    gameId = data.gameId;
-    document.getElementById('game-id-label').textContent = '#' + gameId;
-    document.getElementById('winner-panel').style.display = 'none';
-    document.getElementById('btn-roll').disabled = false;
-    updateUI({
-        activePlayer: data.currentPlayer,
-        nextPlayer: data.currentPlayer,
-        figure: data.figure,
-        statistike: data.statistike,
-        gameOver: false,
-        winnerId: -1,
-        dice: null,
-        cepEventi: [],
-        bonusRoll: false,
-        preskaciPotez: false,
-        modus: 'NEUTRALNI',
-        razlog: '',
-        prioritet: 0
-    });
-    // Person B: call drawBoard() and drawPieces(data.figure) here
-    if (typeof drawBoard === 'function') drawBoard();
-    if (typeof drawPieces === 'function') drawPieces(data.figure);
-}
+    // Stop any running auto-play
+    _stopAuto();
 
-async function roll() {
-    if (!gameId || rolling) return;
-    rolling = true;
-    document.getElementById('btn-roll').disabled = true;
+    gameOver = false;
+    rolling  = false;
+    gameId   = null;
+    setBtnRoll(false, 'Učitavanje...');
 
-    const dice = Math.floor(Math.random() * 6) + 1;
-    document.getElementById('dice-display').textContent = '🎲 ' + dice;
-
-    // Small delay so the player sees the roll before the agent responds
-    await sleep(400);
-
-    const res = await fetch(`/api/game/${gameId}/potez`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dice })
-    });
-
-    if (!res.ok) {
-        console.error('Potez failed:', await res.text());
-        rolling = false;
-        document.getElementById('btn-roll').disabled = false;
+    let data;
+    try {
+        const res = await fetch('/api/game/new', { method: 'POST' });
+        data = await res.json();
+    } catch (e) {
+        console.error('newGame failed:', e);
+        setBtnRoll(true, '🔄 Pokušaj ponovo');
         return;
     }
 
-    const data = await res.json();
+    gameId = data.gameId;
+    document.getElementById('game-id-label').textContent = '#' + gameId;
+    document.getElementById('winner-panel').style.display = 'none';
+    document.getElementById('events-log').innerHTML = '';
 
-    // Person B: highlight all candidate squares for 500ms then animate chosen move
-    if (typeof highlightCandidates === 'function') {
-        highlightCandidates(data.kandidatPotezi);
-        await sleep(500);
-    }
+    if (typeof drawPieces === 'function') drawPieces(data.figure);
 
-    if (typeof animateMove === 'function' && data.odabranaFiguraId !== -1) {
-        await animateMove(data.odabranaFiguraId, data.novaRelativnaPozicija, data.figure);
-    } else if (typeof drawPieces === 'function') {
-        drawPieces(data.figure);
-    }
+    updateModusBadge('NEUTRALNI');
+    updateStatsTable(data.statistike || []);
+    setText('active-player', PLAYER_NAMES[data.currentPlayer] || '–');
+    setText('next-player',   PLAYER_NAMES[(data.currentPlayer + 1) % 4] || '–');
+    setText('figura-id', '–');
+    setText('razlog',    '–');
+    setText('prioritet', '–');
+    toggle('bonus-badge',    false);
+    toggle('preskaci-badge', false);
 
-    updateUI(data);
-
-    if (data.gameOver) {
-        showWinner(data.winnerId);
-        document.getElementById('btn-roll').disabled = true;
-    } else {
-        // Enable next roll (same player if bonusRoll, otherwise next player)
-        document.getElementById('btn-roll').disabled = false;
-    }
-
-    rolling = false;
+    setBtnRoll(true, '🎲 Baci kocku');
 }
+
+// ── Auto-play ──────────────────────────────────────────────────────────────
+
+function toggleAuto() {
+    if (autoPlay) {
+        _stopAuto();
+    } else {
+        _startAuto();
+    }
+}
+
+function _startAuto() {
+    if (gameOver) return;
+    autoPlay = true;
+    const btn = document.getElementById('btn-auto');
+    if (btn) { btn.textContent = '⏹ Stop'; btn.classList.add('running'); }
+    setBtnRoll(false, '🎲 Baci kocku');
+    _scheduleAutoTurn();
+}
+
+function _stopAuto() {
+    autoPlay = false;
+    clearTimeout(autoTimer);
+    autoTimer = null;
+    const btn = document.getElementById('btn-auto');
+    if (btn) { btn.textContent = '▶ Auto'; btn.classList.remove('running'); }
+    if (!gameOver) setBtnRoll(true, '🎲 Baci kocku');
+}
+
+function _scheduleAutoTurn() {
+    if (!autoPlay || gameOver) return;
+    autoTimer = setTimeout(async () => {
+        if (!autoPlay || gameOver) return;
+        await roll();
+        if (autoPlay && !gameOver) _scheduleAutoTurn();
+    }, AUTO_DELAY_MS);
+}
+
+// ── One turn per click ─────────────────────────────────────────────────────
+
+const FETCH_TIMEOUT_MS = 15000;
+
+async function roll() {
+    if (rolling || gameOver || !gameId) return;
+    rolling = true;
+    setBtnRoll(false, '⏳');
+
+    try {
+        // 1. Roll dice and show
+        const dice = Math.floor(Math.random() * 6) + 1;
+        showDice(dice);
+        await sleep(DICE_SHOW_MS);
+
+        // 2. Send to Drools agent (with timeout so a hung server can't freeze the UI)
+        let res, data;
+        const ac = new AbortController();
+        const timer = setTimeout(() => ac.abort(), FETCH_TIMEOUT_MS);
+        try {
+            res  = await fetch(`/api/game/${gameId}/potez`, {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({ dice }),
+                signal:  ac.signal,
+            });
+            data = await res.json();
+        } catch (e) {
+            const msg = e.name === 'AbortError' ? 'Timeout — server didn\'t respond in 15 s' : e.message;
+            console.error('roll() fetch error:', msg);
+            return;
+        } finally {
+            clearTimeout(timer);
+        }
+        if (!res.ok) {
+            console.error('Agent error', res.status, data);
+            return;
+        }
+
+        // 3. Flash valid candidate squares
+        if (typeof highlightCandidates === 'function' && data.kandidatPotezi?.length) {
+            highlightCandidates(data.kandidatPotezi);
+            await sleep(CANDIDATES_MS);
+        }
+
+        // 4. Animate the chosen move
+        if (typeof animateMove === 'function' && data.odabranaFiguraId !== -1) {
+            await animateMove(data.odabranaFiguraId, data.novaRelativnaPozicija, data.figure);
+        } else if (typeof drawPieces === 'function') {
+            drawPieces(data.figure);
+        }
+
+        // 5. Refresh all side panels
+        updateUI(data);
+
+        // 6. Game over?
+        if (data.gameOver) {
+            gameOver = true;
+            showWinner(data.winnerId);
+            setBtnRoll(false, '🏆 Kraj igre');
+            _stopAuto();
+        }
+    } catch (e) {
+        console.error('roll() unexpected error:', e);
+    } finally {
+        if (!gameOver) {
+            rolling = false;
+            // Only re-enable the manual button when auto-play is OFF
+            if (!autoPlay) {
+                setBtnRoll(true, '🎲 Baci kocku');
+            }
+        }
+    }
+}
+
+// ── UI refresh ─────────────────────────────────────────────────────────────
 
 function updateUI(data) {
-    // Modus badge
-    const badge = document.getElementById('modus-badge');
-    badge.textContent = data.modus || 'NEUTRALNI';
-    badge.className = 'badge ' + (data.modus || 'NEUTRALNI').toLowerCase();
+    updateModusBadge(data.modus);
 
-    // Bonus / preskaci badges
-    toggle('bonus-badge',   data.bonusRoll);
-    toggle('preskaci-badge', data.preskaciPotez);
+    toggle('bonus-badge',    !!data.bonusRoll);
+    toggle('preskaci-badge', !!data.preskaciPotez);
 
-    // Turn info
     setText('active-player', PLAYER_NAMES[data.activePlayer] || '–');
     setText('next-player',   PLAYER_NAMES[data.nextPlayer]   || '–');
-    setText('razlog',        data.razlog  || '–');
-    setText('prioritet',     data.prioritet ? '★'.repeat(Math.max(0, 8 - data.prioritet)) + ' (' + data.prioritet + ')' : '–');
 
-    // CEP events
-    if (data.cepEventi && data.cepEventi.length > 0) {
-        const log = document.getElementById('events-log');
-        data.cepEventi.forEach(e => {
-            const li = document.createElement('li');
-            li.className = e.tip;
-            li.textContent = e.tip.replace(/_/g, ' ')
-                + (e.figuraId >= 0 ? ' (f' + e.figuraId + ')' : '')
-                + (e.pozicija >= 0 ? ' @' + e.pozicija : '');
-            log.prepend(li);
-        });
-        // Keep log to last 20 entries
-        while (log.children.length > 20) log.removeChild(log.lastChild);
-    }
+    const fid = data.odabranaFiguraId;
+    setText('figura-id', fid != null && fid >= 0 ? 'F' + fid : '–');
+    setText('razlog',    data.razlog || '–');
+    setText('prioritet', starRating(data.prioritet));
 
-    // Stats table
-    if (data.statistike) {
-        const tbody = document.getElementById('stats-body');
-        tbody.innerHTML = '';
-        data.statistike.forEach(s => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-              <td class="player-${s.igracId}">${PLAYER_NAMES[s.igracId]}</td>
-              <td>${s.ukupnoPoteza}</td>
-              <td>${s.eliminacijeIzvedene}</td>
-              <td>${s.eliminacijePrimljene}</td>
-              <td>${s.figureUCilju}</td>
-              <td>${s.omiljeniStil}</td>
-              <td>${s.winRate.toFixed(0)}%</td>`;
-            tbody.appendChild(tr);
-        });
-    }
+    showDice(data.dice);
+
+    appendEventLog(data.cepEventi || [], null);
+    updateStatsTable(data.statistike || []);
 }
 
-function showWinner(winnerId) {
-    const panel = document.getElementById('winner-panel');
-    const colors = ['#e74c3c','#3498db','#f1c40f','#2ecc71'];
-    panel.style.display = 'block';
-    panel.style.background = colors[winnerId] + '33';
-    document.getElementById('winner-text').textContent =
-        '🏆 ' + PLAYER_NAMES[winnerId] + ' POBIJEDIO!';
+// ── Formatting helpers ─────────────────────────────────────────────────────
+
+function showDice(val) {
+    if (!val) return;
+    const faces = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+    const el = document.getElementById('dice-display');
+    if (el) el.textContent = (faces[val] || '') + '  ' + val;
 }
 
-// ---- Utilities ----
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-function setText(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
+function starRating(priority) {
+    if (!priority || priority < 1) return '–';
+    const filled = Math.max(0, 8 - priority);
+    const empty  = Math.max(0, 7 - filled);
+    return '★'.repeat(filled) + '☆'.repeat(empty) + '  (' + priority + ')';
+}
+
+function setBtnRoll(enabled, label) {
+    const btn = document.getElementById('btn-roll');
+    if (!btn) return;
+    btn.disabled = !enabled;
+    if (label != null) btn.textContent = label;
+}
+
+// ── Utilities ──────────────────────────────────────────────────────────────
+
+function sleep(ms)  { return new Promise(r => setTimeout(r, ms)); }
+
+function setText(id, val) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val != null ? String(val) : '–';
+}
+
 function toggle(id, show) {
     const el = document.getElementById(id);
     if (el) el.classList.toggle('hidden', !show);
 }
 
-// Auto-start on page load
 window.addEventListener('DOMContentLoaded', newGame);

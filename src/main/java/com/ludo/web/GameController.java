@@ -101,6 +101,12 @@ public class GameController {
             session.applyMove(stanje.getOdabranaFiguraId(), stanje.getOdabranaPozicija());
         }
 
+        // --- Finalize stats when game ends (losers' zavrsiPartiju not called in checkWin) ---
+        if (session.isGameOver()) {
+            session.finalizeGame();
+            gameManager.saveStats(session.getAllStat());
+        }
+
         // --- Advance turn ---
         // Three sixes: penalty — pass turn, reset counter
         if (stanje.isPreskaciPotez()) {

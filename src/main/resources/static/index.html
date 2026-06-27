@@ -1,59 +1,86 @@
 <!DOCTYPE html>
 <html lang="bs">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Ne Ljuti Se Čovječe — AI Agent</title>
-  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="css/style.css"/>
 </head>
 <body>
 
   <header>
-    <h1>Ne Ljuti Se Čovječe <span id="game-id-label"></span></h1>
+    <h1>Ne Ljuti Se Čovječe</h1>
+    <span id="game-id-label"></span>
   </header>
 
   <main>
-    <!-- Left: board canvas -->
+
+    <!-- ── Left column: game board ── -->
     <section id="board-section">
       <canvas id="board" width="700" height="700"></canvas>
     </section>
 
-    <!-- Right: info panels -->
+    <!-- ── Right column: info panels ── -->
     <aside id="panels">
 
-      <div class="panel" id="turn-panel">
-        <h2>Potez</h2>
-        <div id="dice-display">🎲 –</div>
-        <div id="modus-badge" class="badge neutralni">NEUTRALNI</div>
-        <div id="bonus-badge" class="badge bonus hidden">BONUS ROLL!</div>
-        <div id="preskaci-badge" class="badge preskaci hidden">PRESKAČEMO</div>
-        <div id="turn-info">
-          <strong>Igrac:</strong> <span id="active-player">–</span><br/>
-          <strong>Sljedeći:</strong> <span id="next-player">–</span><br/>
-          <strong>Razlog:</strong> <span id="razlog">–</span><br/>
-          <strong>Prioritet:</strong> <span id="prioritet">–</span>
+      <!-- 1. Dice + controls -->
+      <div class="panel" id="dice-panel">
+        <div id="dice-display">–</div>
+        <div class="badges-row">
+          <span id="modus-badge" class="badge neutralni">NEUTRALNI</span>
+          <span id="bonus-badge"   class="badge bonus   hidden">BONUS ROLL!</span>
+          <span id="preskaci-badge" class="badge preskaci hidden">PRESKAČEMO</span>
         </div>
-        <button id="btn-roll" onclick="roll()">🎲 Baci kocku</button>
-        <button id="btn-new"  onclick="newGame()">🔄 Nova igra</button>
+        <div class="turn-players">
+          <span>Igra: <strong id="active-player">–</strong></span>
+          <span>Sljedeći: <strong id="next-player">–</strong></span>
+        </div>
+        <div class="btn-row">
+          <button id="btn-roll" onclick="roll()">🎲 Baci kocku</button>
+          <button id="btn-new"  onclick="newGame()">🔄 Nova igra</button>
+          <button id="btn-auto" onclick="toggleAuto()">▶ Auto</button>
+        </div>
       </div>
 
+      <!-- 2. Last move card -->
+      <div class="panel" id="last-move-panel">
+        <h2>Posljednji potez</h2>
+        <div class="move-grid">
+          <span class="move-label">Figura</span>
+          <span class="move-val"  id="figura-id">–</span>
+          <span class="move-label">Razlog</span>
+          <span class="move-val"  id="razlog">–</span>
+          <span class="move-label">Prioritet</span>
+          <span class="move-val stars" id="prioritet">–</span>
+        </div>
+      </div>
+
+      <!-- 3. BC / CEP event feed -->
       <div class="panel" id="events-panel">
-        <h2>CEP Dogadjaji</h2>
+        <h2>BC / CEP Feed</h2>
         <ul id="events-log"></ul>
       </div>
 
+      <!-- 4. Statistics table -->
       <div class="panel" id="stats-panel">
         <h2>Statistike</h2>
         <table id="stats-table">
           <thead>
             <tr>
-              <th>Igrac</th><th>Potezi</th><th>Elim↑</th><th>Elim↓</th>
-              <th>U cilju</th><th>Stil</th><th>W%</th>
+              <th>Igrac</th>
+              <th title="Ukupno poteza">Potezi</th>
+              <th title="Eliminacije izvedene">Elim↑</th>
+              <th title="Eliminacije primljene">Elim↓</th>
+              <th title="Figure u cilju">Cilj</th>
+              <th title="Omiljeni stil igre">Stil</th>
+              <th title="Win rate">W%</th>
             </tr>
           </thead>
           <tbody id="stats-body"></tbody>
         </table>
       </div>
 
+      <!-- 5. Winner overlay (shown by JS when game ends) -->
       <div class="panel" id="winner-panel" style="display:none">
         <h2 id="winner-text"></h2>
       </div>

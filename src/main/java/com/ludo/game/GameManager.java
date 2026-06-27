@@ -1,5 +1,6 @@
 package com.ludo.game;
 
+import com.ludo.model.StatistikaIgraca;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
@@ -11,10 +12,18 @@ public class GameManager {
 
     private final Map<String, GameSession> sessions = new ConcurrentHashMap<>();
 
+    // Survives across games so W% and cross-game counters persist.
+    private StatistikaIgraca[] persistentStats = null;
+
     public String createGame() {
         String id = UUID.randomUUID().toString().substring(0, 8);
-        sessions.put(id, new GameSession());
+        sessions.put(id, new GameSession(persistentStats));
         return id;
+    }
+
+    /** Called once after the game ends so the next createGame() carries the stats forward. */
+    public void saveStats(StatistikaIgraca[] stats) {
+        this.persistentStats = stats;
     }
 
     public GameSession getSession(String id) {
