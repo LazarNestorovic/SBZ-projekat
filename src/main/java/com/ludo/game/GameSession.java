@@ -7,15 +7,6 @@ import com.ludo.model.StatusFigure;
 import java.util.Arrays;
 import java.util.List;
 
-/**
- * Holds the mutable state of a single ongoing game:
- *  - 16 Figura objects (4 players × 4 pieces, IDs 0–15)
- *  - 4 StatistikaIgraca objects shared across turns
- *  - Turn tracking (current player, consecutive sixes)
- *
- * Piece ID layout: player P owns pieces [P*4 .. P*4+3].
- * Player IDs: 0=Red, 1=Blue, 2=Yellow, 3=Green.
- */
 public class GameSession {
 
     private static final int NUM_PLAYERS = 4;
@@ -29,16 +20,10 @@ public class GameSession {
     private boolean gameOver;
     private int winnerId;
 
-    /** Fresh game with no prior stats. */
     public GameSession() {
         this(null);
     }
 
-    /**
-     * Fresh game re-using existing StatistikaIgraca objects so cross-game totals
-     * (totalPartija, totalPobjeda, W%) survive across "Nova igra" presses.
-     * Per-game counters are cleared via resetZaNoviGame().
-     */
     public GameSession(StatistikaIgraca[] existingStats) {
         figure = new Figura[NUM_PLAYERS * PIECES_PER_PLAYER];
         stat = new StatistikaIgraca[NUM_PLAYERS];
@@ -61,13 +46,11 @@ public class GameSession {
         winnerId = -1;
     }
 
-    /** Apply the agent's chosen move, eliminate any hit opponents, and check for game-over. */
     public void applyMove(int figuraId, int novaRelPos) {
         if (figuraId < 0 || figuraId >= figure.length) return;
         Figura moved = figure[figuraId];
         moved.updatePozicija(novaRelPos);
 
-        // Eliminate opponent pieces that land on the same non-safe absolute square
         if (novaRelPos >= 1 && novaRelPos <= 52) {
             int newAbs = moved.getApsolutnaPozicija();
             for (Figura f : figure) {
@@ -86,11 +69,6 @@ public class GameSession {
         checkWin(moved.getVlasnikId());
     }
 
-    /**
-     * Records the end of the game for all non-winners.
-     * Must be called exactly once after isGameOver() becomes true.
-     * The winner's zavrsiPartiju(true) is already called inside checkWin().
-     */
     public void finalizeGame() {
         for (int p = 0; p < NUM_PLAYERS; p++) {
             if (p != winnerId) {
@@ -99,7 +77,6 @@ public class GameSession {
         }
     }
 
-    /** Called after each turn to move to the next player (or keep for bonus roll). */
     public void advancePlayer() {
         currentPlayer = (currentPlayer + 1) % NUM_PLAYERS;
     }
@@ -126,8 +103,6 @@ public class GameSession {
             stat[playerId].zavrsiPartiju(true);
         }
     }
-
-    // ---- Accessors ----
 
     public List<Figura> getFigureList() {
         return Arrays.asList(figure);

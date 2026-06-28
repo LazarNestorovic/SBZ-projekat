@@ -5,14 +5,14 @@ public class Potez {
     private int figuraId;
     private int vlasnikId;
     private int novaRelativnaPozicija;
-    private int novaApsolutnaPozicija; // 0 ako ide u finalnu stazu/cilj
-    private int prioritet;             // 1=najvisi, 7=najnizi, 0=nije postavljen
+    private int novaApsolutnaPozicija;
+    private int prioritet;
     private boolean validan;
-    private boolean novaFigura;        // da li se uvodi figura iz baze
-    private boolean mozeEliminisati;   // da li ovaj potez eliminise protivnika
-    private boolean naSignurnoPlje;    // da li je ciljna pozicija sigurno polje
-    private boolean izOpasneZone;      // da li potez premjesta figuru iz opasne zone
-    private double rizikSkor;          // (sansa eliminacije protivnika) - (sansa nase eliminacije)
+    private boolean novaFigura;
+    private boolean mozeEliminisati;
+    private boolean naSignurnoPlje;
+    private boolean izOpasneZone;
+    private double rizikSkor;
     private String razlog;
 
     public Potez() {

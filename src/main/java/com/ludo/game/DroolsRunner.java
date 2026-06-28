@@ -19,10 +19,6 @@ public class DroolsRunner {
         this.kieContainer = kieContainer;
     }
 
-    /**
-     * Runs one agent turn. All 16 figures and all 4 stat objects must be provided
-     * so that cross-player rules (e.g. eliminacija primljena) fire correctly.
-     */
     public DroolsResult run(int igracId,
                             List<Figura> figure,
                             IshodKocke kocka,
@@ -41,19 +37,16 @@ public class DroolsRunner {
 
             ks.fireAllRules();
 
-            // Collect all Potez facts inserted by the rules
             Collection<?> potezFakti = ks.getObjects(new ClassObjectFilter(Potez.class));
             List<Potez> sviPotezi = potezFakti.stream()
                     .map(o -> (Potez) o)
                     .collect(Collectors.toList());
 
-            // Collect all CEP event facts
             Collection<?> dogadjajFakti = ks.getObjects(new ClassObjectFilter(DogadjajIgre.class));
             List<DogadjajIgre> dogadjaji = dogadjajFakti.stream()
                     .map(o -> (DogadjajIgre) o)
                     .collect(Collectors.toList());
 
-            // stanje is modified in-place by Drools modify() — no need to extract from session
             return new DroolsResult(stanje, sviPotezi, dogadjaji);
         } finally {
             ks.dispose();

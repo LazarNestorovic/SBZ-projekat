@@ -5,10 +5,10 @@ public class StanjeIgre {
     private int aktivniIgracId;
     private boolean bonusRoll;
     private boolean preskaciPotez;
-    private int odabranaFiguraId;   // -1 = jos nije odabrana
+    private int odabranaFiguraId;
     private int odabranaPozicija;
     private String odabraniRazlog;
-    private ModusIgre modus;        // automatski detektovan modus igre za ovaj potez
+    private ModusIgre modus;
 
     public StanjeIgre(int aktivniIgracId) {
         this.aktivniIgracId = aktivniIgracId;

@@ -11,7 +11,6 @@ public class StatistikaDTO {
     public int blokadeKreirane;
     public double stilIgreSkor;
     public String omiljeniStil;
-    // Section 5.2 cross-game fields
     public int totalPartija;
     public int totalPobjeda;
     public double winRate;
