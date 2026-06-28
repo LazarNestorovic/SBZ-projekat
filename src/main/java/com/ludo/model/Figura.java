@@ -6,10 +6,10 @@ public class Figura {
 
     private int id;
     private int vlasnikId;
-    private int relativnaPozicija; // 0=baza, 1-52=tabla, 53-57=finalna staza, 58=cilj
-    private int apsolutnaPozicija; // 1-52 ako je na glavnoj tabli, inace 0
+    private int relativnaPozicija;
+    private int apsolutnaPozicija;
     private StatusFigure status;
-    private boolean sigurna;       // precomputed: da li je figura zasticena od eliminacije
+    private boolean sigurna;
 
     public Figura(int id, int vlasnikId) {
         this.id = id;
@@ -20,7 +20,6 @@ public class Figura {
         this.sigurna = true;
     }
 
-    // Azurira poziciju i preracunava sve izvedene vrijednosti
     public void updatePozicija(int novaPozicija) {
         this.relativnaPozicija = novaPozicija;
         if (novaPozicija == 0) {

@@ -2,8 +2,8 @@ package com.ludo.model;
 
 public class IshodKocke {
 
-    private int vrijednost;         // 1-6
-    private int uzastopneSestice;   // koliko uzastopnih sestica je bacio aktivni igrac
+    private int vrijednost;
+    private int uzastopneSestice;
 
     public IshodKocke(int vrijednost, int uzastopneSestice) {
         this.vrijednost = vrijednost;

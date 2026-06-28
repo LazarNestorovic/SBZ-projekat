@@ -12,7 +12,6 @@ public class GameManager {
 
     private final Map<String, GameSession> sessions = new ConcurrentHashMap<>();
 
-    // Survives across games so W% and cross-game counters persist.
     private StatistikaIgraca[] persistentStats = null;
 
     public String createGame() {
@@ -21,7 +20,6 @@ public class GameManager {
         return id;
     }
 
-    /** Called once after the game ends so the next createGame() carries the stats forward. */
     public void saveStats(StatistikaIgraca[] stats) {
         this.persistentStats = stats;
     }

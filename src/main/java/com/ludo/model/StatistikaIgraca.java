@@ -4,7 +4,6 @@ public class StatistikaIgraca {
 
     private int igracId;
 
-    // Sekcija 5.1 — statistike unutar jedne partije (akumuliraju se potez po potez)
     private int ukupnoPoteza;
     private int brojSestica;
     private int uzastopneSesticeMax;
@@ -15,13 +14,12 @@ public class StatistikaIgraca {
     private int blokadeKreirane;
     private double prosjUdaljenostOdCilja;
     private int poteziNaSigurno;
-    private double stilIgreSkor; // (eliminacije*2 - poteziNaSigurno) / ukupnoPoteza
+    private double stilIgreSkor;
 
-    // Sekcija 5.2 — medjupartijske statistike (akumuliraju se partija po partija)
     private int totalPartija;
     private int totalPobjeda;
     private int totalPotezaSvihPartija;
-    private int potezaUTrenutnojPartiji;   // resetuje se pozivom zavrsiPartiju()
+    private int potezaUTrenutnojPartiji;
     private int najduzaPartija;
     private int najkracaPartija;
 
@@ -29,7 +27,6 @@ public class StatistikaIgraca {
         this.igracId = igracId;
     }
 
-    // Sekcija 5.2 — poziva se na kraju svake partije (pobjeda ili poraz)
     public void zavrsiPartiju(boolean pobjeda) {
         totalPartija++;
         if (pobjeda) totalPobjeda++;
@@ -59,7 +56,6 @@ public class StatistikaIgraca {
         return "balansiran";
     }
 
-    // Resets per-game counters for a fresh game while preserving cross-game totals.
     public void resetZaNoviGame() {
         ukupnoPoteza         = 0;
         brojSestica          = 0;
@@ -72,18 +68,14 @@ public class StatistikaIgraca {
         prosjUdaljenostOdCilja = 0.0;
         poteziNaSigurno      = 0;
         stilIgreSkor         = 0.0;
-        // potezaUTrenutnojPartiji stays 0 (already reset by zavrsiPartiju)
-        // totalPartija / totalPobjeda / totalPotezaSvihPartija / najduza/najkraca — KEPT
     }
 
-    // Azurira stil igre skor nakon svakog poteza
     public void azurirajStilIgre() {
         if (ukupnoPoteza > 0) {
             stilIgreSkor = (double)(eliminacijeIzvedene * 2 - poteziNaSigurno) / ukupnoPoteza;
         }
     }
 
-    // Azurira prosjecnu udaljenost (inkrementalno)
     public void azurirajProsjUdaljenost(double novaUdaljenost) {
         if (ukupnoPoteza == 0) {
             prosjUdaljenostOdCilja = novaUdaljenost;

@@ -12,9 +12,9 @@ public class DogadjajIgre {
     }
 
     private TipDogadjaja tip;
-    private int igracId;    // affected player (our player)
-    private int figuraId;   // relevant piece, -1 if n/a
-    private int pozicija;   // relevant field,  -1 if n/a
+    private int igracId;
+    private int figuraId;
+    private int pozicija;
     private long timestamp;
 
     public DogadjajIgre(TipDogadjaja tip, int igracId, int figuraId, int pozicija) {
