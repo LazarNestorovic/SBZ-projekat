@@ -207,7 +207,7 @@ when
     eval( $relPoz + $dice <= BoardUtils.CILJ )
 then
     int novaPoz = $relPoz + $dice;
-    int novaAbs = (novaPoz <= 52) ? BoardUtils.relativnaUApsolutnu( $figura.getVlasnikId(), novaPoz ) : 0;
+    int novaAbs = (novaPoz <= BoardUtils.ZADNJA_GLAVNA_REL_POZICIJA) ? BoardUtils.relativnaUApsolutnu( $figura.getVlasnikId(), novaPoz ) : 0;
 
     Potez potez = new Potez();
     potez.setFiguraId( $figura.getId() );

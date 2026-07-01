@@ -26,15 +26,15 @@ public class Figura {
             this.status = StatusFigure.BAZA;
             this.apsolutnaPozicija = 0;
             this.sigurna = true;
-        } else if (novaPozicija >= 1 && novaPozicija <= 52) {
+        } else if (novaPozicija >= 1 && novaPozicija <= BoardUtils.ZADNJA_GLAVNA_REL_POZICIJA) {
             this.status = StatusFigure.AKTIVNA;
             this.apsolutnaPozicija = BoardUtils.relativnaUApsolutnu(vlasnikId, novaPozicija);
             this.sigurna = BoardUtils.jeSigurnaPozicija(vlasnikId, this.apsolutnaPozicija);
-        } else if (novaPozicija >= 53 && novaPozicija <= 57) {
+        } else if (novaPozicija >= BoardUtils.POCETNA_FINALNA_STAZA && novaPozicija <= BoardUtils.ZADNJA_FINALNA_STAZA) {
             this.status = StatusFigure.FINALNA_STAZA;
             this.apsolutnaPozicija = 0;
             this.sigurna = true;
-        } else if (novaPozicija == 58) {
+        } else if (novaPozicija == BoardUtils.CILJ) {
             this.status = StatusFigure.ZAVRSENA;
             this.apsolutnaPozicija = 0;
             this.sigurna = true;

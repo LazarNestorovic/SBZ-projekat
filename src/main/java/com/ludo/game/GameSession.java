@@ -3,6 +3,7 @@ package com.ludo.game;
 import com.ludo.model.Figura;
 import com.ludo.model.StatistikaIgraca;
 import com.ludo.model.StatusFigure;
+import com.ludo.util.BoardUtils;
 
 import java.util.Arrays;
 import java.util.List;
@@ -51,7 +52,7 @@ public class GameSession {
         Figura moved = figure[figuraId];
         moved.updatePozicija(novaRelPos);
 
-        if (novaRelPos >= 1 && novaRelPos <= 52) {
+        if (novaRelPos >= 1 && novaRelPos <= BoardUtils.ZADNJA_GLAVNA_REL_POZICIJA) {
             int newAbs = moved.getApsolutnaPozicija();
             for (Figura f : figure) {
                 if (f.getId() != figuraId

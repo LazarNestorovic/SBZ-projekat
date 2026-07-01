@@ -83,18 +83,18 @@ function relPosToPixel(vlasnikId, relativnaPozicija, pieceIndex = 0) {
         const [r, c] = HOME_POS[vlasnikId][pieceIndex % 4];
         return cellCenter(r, c);
     }
-    // relPos 1–52 → main board (convert to shared absolute position first)
-    if (relativnaPozicija >= 1 && relativnaPozicija <= 52) {
+    // relPos 1–51 → main board (convert to shared absolute position first)
+    if (relativnaPozicija >= 1 && relativnaPozicija <= 51) {
         const abs = (POCETNE_POZICIJE[vlasnikId] + relativnaPozicija - 2) % 52 + 1;
         const [r, c] = ABS_TO_GRID[abs];
         return cellCenter(r, c);
     }
-    // relPos 53–57 → home stretch
-    if (relativnaPozicija >= 53 && relativnaPozicija <= 57) {
-        const [r, c] = HOME_STRETCH[vlasnikId][relativnaPozicija - 53];
+    // relPos 52–56 → home stretch
+    if (relativnaPozicija >= 52 && relativnaPozicija <= 56) {
+        const [r, c] = HOME_STRETCH[vlasnikId][relativnaPozicija - 52];
         return cellCenter(r, c);
     }
-    // relPos 58 → player's colored triangle inside the centre star.
+    // relPos 57 → player's colored triangle inside the centre star.
     // Each triangle's centroid sits one cell from the centre in the player's approach direction:
     //   Red  enters from the left  → (7, 6)
     //   Blue enters from the top   → (6, 7)
