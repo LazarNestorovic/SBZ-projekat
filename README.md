@@ -169,7 +169,7 @@ Tokom partije akumulirati (klasa `StatistikaIgraca` je pripremljena, pravila ned
 - `prosj_udaljenost_od_cilja` (inkrementalna srednja vrijednost)
 - `potezi_na_sigurno`, `stil_igre_skor = (eliminacije*2 - potezi_na_sigurno) / ukupno_poteza`
 
-### Sekcija 5.3 — Preporuka poteza zasnovana na statistikama
+### Sekcija 5.3 — Preporuka poteza zasnovana na statistikamaa
 Prilagoditi prioritete na osnovu historijskih podataka igrača:
 - `stil_igre_skor > 0.6` → povećati prioritet eliminacije
 - `eliminacije_primljene > 5` → aktivirati defanzivni modus ranije
